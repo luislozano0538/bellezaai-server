@@ -128,8 +128,31 @@ document.getElementById('customerForm').addEventListener('submit',e=>{e.preventD
 function openChat(){const box=document.getElementById('messages');if(!box.children.length)box.innerHTML=`<div class="bubble bot">${tr[lang].botHello}</div>`;openModal('chatModal')}
 function quickAsk(type){const text={agenda:lang==='es'?'¿Cómo está mi agenda de hoy?':"How is today's schedule?",message:lang==='es'?'Ayúdame a responder al último cliente.':'Help me reply to the latest client.',income:lang==='es'?'Dame el resumen de hoy.':"Give me today's summary."}[type];sendChat(text)}
 document.getElementById('chatForm').addEventListener('submit',e=>{e.preventDefault();const inp=document.getElementById('chatInput'),text=inp.value.trim();if(text){sendChat(text);inp.value=''}});
-function sendChat(text){const box=document.getElementById('messages');box.insertAdjacentHTML('beforeend',`<div class="bubble user">${esc(text)}</div>`);box.scrollTop=box.scrollHeight;setTimeout(()=>{box.insertAdjacentHTML('beforeend',`<div class="bubble bot">${botReply(text)}</div>`);box.scrollTop=box.scrollHeight},450)}
-function botReply(text){const q=text.toLowerCase(),todays=appointments.filter(a=>a.date===localDate(0)),sum=todays.reduce((s,a)=>s+Number(a.price||0),0);if(/agenda|schedule|cita|appointment/.test(q))return lang==='es'?`Tienes ${todays.length} citas hoy. La próxima es ${todays[0]?prettyTime(todays[0].time)+' con '+esc(todays[0].name):'ninguna'}.`:`You have ${todays.length} appointments today. Your next is ${todays[0]?prettyTime(todays[0].time)+' with '+esc(todays[0].name):'none'}.`;if(/ingreso|resumen|income|summary/.test(q))return lang==='es'?`Hoy tienes ${todays.length} citas y $${sum} en ingresos programados.`:`Today you have ${todays.length} appointments and $${sum} in scheduled income.`;if(/responder|reply|mensaje|message/.test(q))return lang==='es'?'Puedes responder: “¡Hola! Sí tenemos disponibilidad. ¿Qué servicio deseas y qué horario prefieres?”':'You can reply: “Hi! Yes, we have availability. Which service and time do you prefer?”';return lang==='es'?'Puedo ayudarte con citas, clientes, mensajes, horarios e ingresos. Esta versión usa respuestas de demostración; la conexión con IA real será el siguiente paso.':'I can help with appointments, clients, messages, hours and income. This version uses demo responses; connecting a live AI is the next step.'}
+async function sendChat(text){
+  const box=document.getElementById('messages');
+  box.insertAdjacentHTML('beforeend',`<div class="bubble user">${esc(text)}</div>`);
+  box.scrollTop=box.scrollHeight;
+
+  const bot=document.createElement('div');
+  bot.className='bubble bot';
+  bot.textContent=lang==='es'?'Pensando...':'Thinking...';
+  box.appendChild(bot);
+
+  try{
+    const r=await fetch('https://bellezaai-server.onrender.com/api/chat',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({message:text})
+    });
+    const data=await r.json();
+    bot.textContent=r.ok ? data.reply : (data.error || 'Error al conectar con BellezaAI');
+  }catch(e){
+    bot.textContent=lang==='es'?'No pude conectar con BellezaAI.':'Could not connect with BellezaAI.';
+  }
+
+  box.scrollTop=box.scrollHeight;
+}
+funct
 function changeLanguage(v){lang=v;localStorage.setItem('bellezaAILang',v);translate();renderHome();renderAppointments();renderCustomers();document.getElementById('messages').innerHTML=''}
 function translate(){document.documentElement.lang=lang;document.getElementById('language').value=lang;document.querySelectorAll('[data-t]').forEach(el=>{const k=el.dataset.t;if(tr[lang][k])el.textContent=tr[lang][k]});document.querySelectorAll('[data-ph]').forEach(el=>el.placeholder=tr[lang][el.dataset.ph]);document.getElementById('today').textContent=new Intl.DateTimeFormat(lang==='es'?'es-US':'en-US',{weekday:'long',month:'long',day:'numeric'}).format(new Date())}
 let toastTimer;function toast(t){const el=document.getElementById('toast');el.textContent=t;el.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('show'),1900)}
