@@ -15,7 +15,9 @@ const JWT_SECRET = process.env.JWT_SECRET;
 
 app.use(cors());
 app.use(express.json({ limit: "1mb" }));
-
+app.get("/", (_req, res) => {
+  res.sendFile("index.html", { root: process.cwd() });
+});
 async function initDatabase() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS salons (
