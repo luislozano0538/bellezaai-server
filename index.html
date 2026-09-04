@@ -94,7 +94,7 @@
 </div>
 <script>
 const seedAppointments=[];
-const seedCustomers=[]; const API=location.origin;
+const seedCustomers=[]; const API=location.origin; let token=localStorage.getItem('bellezaAIToken')||'';
 function localDate(add){const d=new Date();d.setDate(d.getDate()+add);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
 let appointments=[];
 let customers=[];
