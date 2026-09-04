@@ -317,8 +317,145 @@ app.get("/api/appointments", auth, async (req, res) => {
   );
 
   res.json(q.rows);
+});  
+app.get("/api/clients", auth, async (req, res) => {
+  try {
+    const q = await pool.query(
+      `SELECT id, name, phone, email, notes, created_at
+       FROM clients
+       WHERE salon_id=$1
+       ORDER BY name`,
+      [req.user.salonId]
+    );
+
+    res.json(q.rows);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "No se pudieron cargar los clientes." });
+  }
 });
 
+app.post("/api/clients", auth, async (req, res) => {
+  try {
+    const { name, phone = "", email = "", notes = "" } = req.body || {};
+
+    if (!name) {
+      return res.status(400).json({ error: "Falta el nombre del cliente." });
+    }
+
+    const id = crypto.randomUUID();
+
+    const q = await pool.query(
+      `INSERT INTO clients
+       (id, salon_id, name, phone, email, notes)
+       VALUES ($1,$2,$3,$4,$5,$6)
+       RETURNING id, name, phone, email, notes, created_at`,
+      [id, req.user.salonId, name, phone, email, notes]
+    );
+
+    res.status(201).json(q.rows[0]);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "No se pudo guardar el cliente." });
+  }
+});
+
+app.get("/api/services", auth, async (req, res) => {
+  try {
+    const q = await pool.query(
+      `SELECT id, name, duration_minutes, price_label
+       FROM services
+       WHERE salon_id=$1 AND active=true
+       ORDER BY name`,
+      [req.user.salonId]
+    );
+
+    res.json(q.rows);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "No se pudieron cargar los servicios." });
+  }
+});
+
+app.post("/api/appointments", auth, async (req, res) => {
+  try {
+    const { clientId, serviceId, startsAt, notes = "" } = req.body || {};
+
+    if (!clientId || !serviceId || !startsAt) {
+      return res.status(400).json({ error: "Faltan datos de la cita." });
+    }
+
+    const service = await pool.query(
+      `SELECT id, duration_minutes
+       FROM services
+       WHERE id=$1 AND salon_id=$2 AND active=true`,
+      [serviceId, req.user.salonId]
+    );
+
+    if (!service.rows[0]) {
+      return res.status(404).json({ error: "Servicio no encontrado." });
+    }
+
+    const client = await pool.query(
+      `SELECT id FROM clients
+       WHERE id=$1 AND salon_id=$2`,
+      [clientId, req.user.salonId]
+    );
+
+    if (!client.rows[0]) {
+      return res.status(404).json({ error: "Cliente no encontrado." });
+    }
+
+    const start = new Date(startsAt);
+
+    if (Number.isNaN(start.getTime())) {
+      return res.status(400).json({ error: "Fecha de cita inválida." });
+    }
+
+    const end = new Date(
+      start.getTime() + service.rows[0].duration_minutes * 60000
+    );
+
+    const conflict = await pool.query(
+      `SELECT id FROM appointments
+       WHERE salon_id=$1
+       AND status<>'cancelled'
+       AND starts_at < $3
+       AND ends_at > $2
+       LIMIT 1`,
+      [req.user.salonId, start, end]
+    );
+
+    if (conflict.rows[0]) {
+      return res.status(409).json({
+        error: "Ese horario ya tiene una cita."
+      });
+    }
+
+    const id = crypto.randomUUID();
+
+    const q = await pool.query(
+      `INSERT INTO appointments
+       (id, salon_id, client_id, service_id, starts_at, ends_at, status, notes)
+       VALUES ($1,$2,$3,$4,$5,$6,'confirmed',$7)
+       RETURNING *`,
+      [
+        id,
+        req.user.salonId,
+        clientId,
+        serviceId,
+        start,
+        end,
+        notes
+      ]
+    );
+
+    res.status(201).json(q.rows[0]);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "No se pudo guardar la cita." });
+  }
+});
 app.post("/api/chat", async (req, res) => {
   if (!process.env.OPENAI_API_KEY) {
     return res.status(503).json({
