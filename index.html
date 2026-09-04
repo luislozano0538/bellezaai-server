@@ -152,7 +152,7 @@ async function sendChat(text){
 
   box.scrollTop=box.scrollHeight;
 }
-funct
+
 function changeLanguage(v){lang=v;localStorage.setItem('bellezaAILang',v);translate();renderHome();renderAppointments();renderCustomers();document.getElementById('messages').innerHTML=''}
 function translate(){document.documentElement.lang=lang;document.getElementById('language').value=lang;document.querySelectorAll('[data-t]').forEach(el=>{const k=el.dataset.t;if(tr[lang][k])el.textContent=tr[lang][k]});document.querySelectorAll('[data-ph]').forEach(el=>el.placeholder=tr[lang][el.dataset.ph]);document.getElementById('today').textContent=new Intl.DateTimeFormat(lang==='es'?'es-US':'en-US',{weekday:'long',month:'long',day:'numeric'}).format(new Date())}
 let toastTimer;function toast(t){const el=document.getElementById('toast');el.textContent=t;el.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('show'),1900)}
