@@ -93,15 +93,11 @@
   <div class="toast" id="toast"></div>
 </div>
 <script>
-const seedAppointments=[
- {id:1,name:'María',service:'Balayage',date:localDate(0),time:'10:00',price:180,status:'confirmed'},
- {id:2,name:'Jennifer',service:'Corte',date:localDate(0),time:'13:30',price:55,status:'confirmed'},
- {id:3,name:'Ana',service:'Manicure',date:localDate(0),time:'15:00',price:45,status:'confirmed'},
- {id:4,name:'Carolina',service:'Color',date:localDate(1),time:'11:00',price:120,status:'confirmed'}];
-const seedCustomers=[{id:1,name:'María López',phone:'(555) 234-7788',email:'maria@email.com',visits:8},{id:2,name:'Jennifer Ruiz',phone:'(555) 814-0092',email:'jennifer@email.com',visits:4},{id:3,name:'Ana Torres',phone:'(555) 381-4621',email:'ana@email.com',visits:11}];
+const seedAppointments=[];
+const seedCustomers=[];
 function localDate(add){const d=new Date();d.setDate(d.getDate()+add);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
-let appointments=JSON.parse(localStorage.getItem('bellezaAIAppointments')||'null')||seedAppointments;
-let customers=JSON.parse(localStorage.getItem('bellezaAICustomers')||'null')||seedCustomers;
+let appointments=[];
+let customers=[];
 let filter='all',lang=localStorage.getItem('bellezaAILang')||'es';
 const tr={
 es:{salonPanel:'Panel inteligente de tu salón',hello:'Hola, Luis 👋',todayAppointments:'Citas hoy',newMessages:'Mensajes nuevos',clients:'Clientes',todayIncome:'Ingresos hoy',yourAI:'Tu asistente IA',aiIntro:'Responde clientes, revisa horarios y ayuda a llenar tu agenda las 24 horas.',talkAI:'Hablar con mi IA',nextAppointments:'Próximas citas',seeAll:'Ver todas',lastMessage:'Último mensaje',clientQuestion:'“¿Tienen disponibilidad el viernes para un balayage?”',aiAnswer:'“Sí. Tengo espacio a las 10:00 a. m. ¿Deseas reservar?”',appointments:'Citas',customers:'Clientes',settings:'Ajustes',home:'Inicio',all:'Todas',today:'Hoy',confirmed:'Confirmadas',salon:'Salón',salonName:'Nombre del salón',hours:'Horario',assistant:'Asistente',autoReplies:'Respuestas automáticas',autoRepliesSub:'Contestar preguntas frecuentes',reminders:'Recordatorios',remindersSub:'24 horas antes de cada cita',reviewRequests:'Solicitar reseñas',reviewSub:'Después de cada servicio',preferences:'Preferencias',language:'Idioma',reports:'Reportes',reportsSub:'Resumen semanal del negocio',newAppointment:'Nueva cita',clientName:'Nombre del cliente',service:'Servicio',date:'Fecha',time:'Hora',price:'Precio',saveAppointment:'Guardar cita',newCustomer:'Nuevo cliente',name:'Nombre',phone:'Teléfono',saveCustomer:'Guardar cliente',online:'● En línea · Español/English',checkSchedule:'Revisar agenda',replyCustomer:'Responder cliente',todaySummary:'Resumen de hoy',searchAppointments:'Buscar cita o servicio',searchCustomers:'Buscar cliente',askAI:'Pregúntale a tu asistente…',noAppointments:'No hay citas',noCustomers:'No hay clientes',visits:'visitas',saved:'Guardado correctamente',botHello:'Hola, Luis. Soy tu asistente de BellezaAI. ¿En qué te ayudo con el salón?'},
