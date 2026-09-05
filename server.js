@@ -57,11 +57,26 @@ async function initDatabase() {
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
 
+    CREATE TABLE IF NOT EXISTS professionals (
+      id UUID PRIMARY KEY,
+      salon_id UUID NOT NULL REFERENCES salons(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      phone TEXT,
+      email TEXT,
+      profile_photo_url TEXT,
+      active BOOLEAN DEFAULT TRUE,
+      commission_type TEXT,
+      commission_value NUMERIC(10, 2),
+      membership_fee NUMERIC(10, 2),
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+
     CREATE TABLE IF NOT EXISTS appointments (
       id UUID PRIMARY KEY,
       salon_id UUID NOT NULL REFERENCES salons(id) ON DELETE CASCADE,
       client_id UUID NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
       service_id UUID NOT NULL REFERENCES services(id),
+      professional_id UUID REFERENCES professionals(id) ON DELETE SET NULL,
       starts_at TIMESTAMPTZ NOT NULL,
       ends_at TIMESTAMPTZ NOT NULL,
       status TEXT NOT NULL DEFAULT 'confirmed',
@@ -87,11 +102,17 @@ async function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_appointments_salon_start
       ON appointments(salon_id, starts_at);
 
+    CREATE INDEX IF NOT EXISTS idx_appointments_professional
+      ON appointments(professional_id, starts_at);
+
     CREATE INDEX IF NOT EXISTS idx_reminders_appointment
       ON reminders(appointment_id);
+
+    CREATE INDEX IF NOT EXISTS idx_professionals_salon
+      ON professionals(salon_id);
   `);
 
-  console.log("BellezaAI database ready");
+  console.log("BellezaAI database ready with professionals support");
 }
 
 function requireConfig(res) {
@@ -309,10 +330,13 @@ app.get("/api/appointments", auth, async (req, res) => {
        c.name,
        c.phone,
        s.name AS service,
-       s.price_label AS price
+       s.price_label AS price,
+       p.name AS professional_name,
+       a.professional_id
      FROM appointments a
      JOIN clients c ON c.id=a.client_id
      JOIN services s ON s.id=a.service_id
+     LEFT JOIN professionals p ON p.id=a.professional_id
      WHERE a.salon_id=$1
      ORDER BY a.starts_at`,
     [req.user.salonId]
@@ -381,7 +405,7 @@ app.get("/api/services", auth, async (req, res) => {
 
 app.post("/api/appointments", auth, async (req, res) => {
   try {
-    const { clientId, serviceId, startsAt, notes = "" } = req.body || {};
+    const { clientId, serviceId, startsAt, notes = "", professionalId = null } = req.body || {};
 
     if (!clientId || !serviceId || !startsAt) {
       return res.status(400).json({ error: "Faltan datos de la cita." });
@@ -408,6 +432,19 @@ app.post("/api/appointments", auth, async (req, res) => {
       return res.status(404).json({ error: "Cliente no encontrado." });
     }
 
+    // Validar profesional si se proporciona
+    if (professionalId) {
+      const professional = await pool.query(
+        `SELECT id FROM professionals
+         WHERE id=$1 AND salon_id=$2 AND active=true`,
+        [professionalId, req.user.salonId]
+      );
+
+      if (!professional.rows[0]) {
+        return res.status(404).json({ error: "Profesional no encontrado o inactivo." });
+      }
+    }
+
     const start = new Date(startsAt);
 
     if (Number.isNaN(start.getTime())) {
@@ -418,15 +455,30 @@ app.post("/api/appointments", auth, async (req, res) => {
       start.getTime() + service.rows[0].duration_minutes * 60000
     );
 
-    const conflict = await pool.query(
-      `SELECT id FROM appointments
-       WHERE salon_id=$1
-       AND status<>'cancelled'
-       AND starts_at < $3
-       AND ends_at > $2
-       LIMIT 1`,
-      [req.user.salonId, start, end]
-    );
+    // Validar conflictos: si hay professional_id, solo verificar ese profesional
+    // Si no hay professional_id, verificar todo el salón (comportamiento anterior)
+    let conflictQuery;
+    let conflictParams;
+
+    if (professionalId) {
+      conflictQuery = `SELECT id FROM appointments
+        WHERE professional_id=$1
+        AND status<>'cancelled'
+        AND starts_at < $3
+        AND ends_at > $2
+        LIMIT 1`;
+      conflictParams = [professionalId, start, end];
+    } else {
+      conflictQuery = `SELECT id FROM appointments
+        WHERE salon_id=$1
+        AND status<>'cancelled'
+        AND starts_at < $3
+        AND ends_at > $2
+        LIMIT 1`;
+      conflictParams = [req.user.salonId, start, end];
+    }
+
+    const conflict = await pool.query(conflictQuery, conflictParams);
 
     if (conflict.rows[0]) {
       return res.status(409).json({
@@ -438,14 +490,15 @@ app.post("/api/appointments", auth, async (req, res) => {
 
     const q = await pool.query(
       `INSERT INTO appointments
-       (id, salon_id, client_id, service_id, starts_at, ends_at, status, notes)
-       VALUES ($1,$2,$3,$4,$5,$6,'confirmed',$7)
+       (id, salon_id, client_id, service_id, professional_id, starts_at, ends_at, status, notes)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,'confirmed',$8)
        RETURNING *`,
       [
         id,
         req.user.salonId,
         clientId,
         serviceId,
+        professionalId,
         start,
         end,
         notes
@@ -458,6 +511,7 @@ app.post("/api/appointments", auth, async (req, res) => {
     res.status(500).json({ error: "No se pudo guardar la cita." });
   }
 });
+
 app.post("/api/chat", async (req, res) => {
   if (!process.env.OPENAI_API_KEY) {
     return res.status(503).json({
