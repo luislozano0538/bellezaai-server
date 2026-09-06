@@ -71,6 +71,24 @@ async function initDatabase() {
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
 
+    CREATE TABLE IF NOT EXISTS professional_specialties (
+      id UUID PRIMARY KEY,
+      professional_id UUID NOT NULL REFERENCES professionals(id) ON DELETE CASCADE,
+      specialty_name TEXT NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS professional_services (
+      id UUID PRIMARY KEY,
+      salon_id UUID NOT NULL REFERENCES salons(id) ON DELETE CASCADE,
+      professional_id UUID NOT NULL REFERENCES professionals(id) ON DELETE CASCADE,
+      service_id UUID NOT NULL REFERENCES services(id),
+      price_label TEXT,
+      duration_minutes INTEGER,
+      active BOOLEAN DEFAULT TRUE,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+
     CREATE TABLE IF NOT EXISTS appointments (
       id UUID PRIMARY KEY,
       salon_id UUID NOT NULL REFERENCES salons(id) ON DELETE CASCADE,
@@ -110,6 +128,12 @@ async function initDatabase() {
 
     CREATE INDEX IF NOT EXISTS idx_professionals_salon
       ON professionals(salon_id);
+
+    CREATE INDEX IF NOT EXISTS idx_professional_specialties_professional
+      ON professional_specialties(professional_id);
+
+    CREATE INDEX IF NOT EXISTS idx_professional_services_salon_professional
+      ON professional_services(salon_id, professional_id);
   `);
 
   console.log("BellezaAI database ready with professionals support");
