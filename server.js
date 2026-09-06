@@ -536,6 +536,108 @@ app.post("/api/appointments", auth, async (req, res) => {
   }
 });
 
+// ==================== ENDPOINTS DE PROFESIONALES ====================
+
+// GET /api/professionals - Listar todos los profesionales del salón
+app.get("/api/professionals", auth, async (req, res) => {
+  try {
+    const q = await pool.query(
+      `SELECT id, name, phone, email, profile_photo_url, active,
+              commission_type, commission_value, membership_fee, created_at
+       FROM professionals
+       WHERE salon_id=$1
+       ORDER BY name`,
+      [req.user.salonId]
+    );
+
+    // Obtener especialidades para cada profesional
+    const professionals = await Promise.all(
+      q.rows.map(async (prof) => {
+        const specQ = await pool.query(
+          `SELECT specialty_name FROM professional_specialties
+           WHERE professional_id=$1 ORDER BY created_at`,
+          [prof.id]
+        );
+        return {
+          ...prof,
+          specialties: specQ.rows.map(s => s.specialty_name)
+        };
+      })
+    );
+
+    res.json(professionals);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "No se pudieron cargar los profesionales." });
+  }
+});
+
+// POST /api/professionals - Crear nuevo profesional
+app.post("/api/professionals", auth, async (req, res) => {
+  try {
+    const {
+      name,
+      phone = "",
+      email = "",
+      profile_photo_url = null,
+      active = true,
+      commission_type = null,
+      commission_value = null,
+      membership_fee = null,
+      specialties = []
+    } = req.body || {};
+
+    if (!name) {
+      return res.status(400).json({ error: "Falta el nombre del profesional." });
+    }
+
+    const id = crypto.randomUUID();
+    const client = await pool.connect();
+
+    try {
+      await client.query("BEGIN");
+
+      // Insertar profesional
+      const profQ = await client.query(
+        `INSERT INTO professionals
+         (id, salon_id, name, phone, email, profile_photo_url, active, commission_type, commission_value, membership_fee)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+         RETURNING id, name, phone, email, profile_photo_url, active, commission_type, commission_value, membership_fee, created_at`,
+        [id, req.user.salonId, name, phone, email, profile_photo_url, active, commission_type, commission_value, membership_fee]
+      );
+
+      // Insertar especialidades
+      if (Array.isArray(specialties) && specialties.length > 0) {
+        for (const specialty of specialties) {
+          if (specialty.trim()) {
+            await client.query(
+              `INSERT INTO professional_specialties(id, professional_id, specialty_name)
+               VALUES($1, $2, $3)`,
+              [crypto.randomUUID(), id, specialty.trim()]
+            );
+          }
+        }
+      }
+
+      await client.query("COMMIT");
+
+      const result = profQ.rows[0];
+      res.status(201).json({
+        ...result,
+        specialties: Array.isArray(specialties) ? specialties.filter(s => s.trim()) : []
+      });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "No se pudo guardar el profesional." });
+  }
+});
+
 app.post("/api/chat", async (req, res) => {
   if (!process.env.OPENAI_API_KEY) {
     return res.status(503).json({
