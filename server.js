@@ -110,6 +110,9 @@ async function initDatabase() {
       sent_at TIMESTAMPTZ,
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
+        ALTER TABLE appointments
+      ADD COLUMN IF NOT EXISTS professional_id UUID
+      REFERENCES professionals(id) ON DELETE SET NULL;
 
     CREATE INDEX IF NOT EXISTS idx_clients_salon
       ON clients(salon_id);
