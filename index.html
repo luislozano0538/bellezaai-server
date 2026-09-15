@@ -246,5 +246,131 @@ translate();renderHome();renderAppointments();renderCustomers();
   });
 })();
 </script>
-</body>
+ <dialog id="registerDialog" style="border:0;border-radius:20px;padding:24px;width:min(360px,85vw)">
+  <form id="registerForm">
+    <h2>Crear cuenta de BellezaAI</h2>
+    <p>Registra tu salón para comenzar.</p>
+
+    <label for="registerName">Tu nombre</label>
+    <input id="registerName" name="name" required
+      autocomplete="name">
+
+    <label for="registerSalon">Nombre del salón</label>
+    <input id="registerSalon" name="salonName" required
+      autocomplete="organization">
+
+    <label for="registerEmail">Correo electrónico</label>
+    <input id="registerEmail" name="email" type="email"
+      required autocomplete="username">
+
+    <label for="registerPassword">Contraseña</label>
+    <input id="registerPassword" name="password" type="password"
+      required minlength="12" autocomplete="new-password">
+    <small>Usa al menos 12 caracteres.</small>
+
+    <p id="registerStatus" role="status"></p>
+    <button id="registerSubmit" type="submit">Crear cuenta</button>
+    <button id="registerClose" type="button">Cerrar</button>
+  </form>
+</dialog>
+
+<style>
+  #registerForm input {
+    display: block;
+    width: 100%;
+    margin: 8px 0 16px;
+    padding: 10px;
+    box-sizing: border-box;
+  }
+  #registerForm button {
+    padding: 10px 16px;
+    margin-top: 10px;
+    border-radius: 10px;
+  }
+</style>
+
+<script>
+(() => {
+  const dialog = document.getElementById('registerDialog');
+  const form = document.getElementById('registerForm');
+  const status = document.getElementById('registerStatus');
+  const submit = document.getElementById('registerSubmit');
+  const close = document.getElementById('registerClose');
+
+  const createButton = document.createElement('button');
+  createButton.type = 'button';
+  createButton.textContent = 'Crear cuenta';
+  createButton.style.cssText =
+    'display:block;margin-top:16px;padding:10px 16px;' +
+    'border:0;border-radius:10px;background:#6f3b75;color:white';
+
+  document.getElementById('loginForm').append(createButton);
+
+  createButton.onclick = () => {
+    document.getElementById('loginDialog').close();
+    status.textContent = '';
+    dialog.showModal();
+  };
+
+  close.onclick = () => dialog.close();
+
+  dialog.addEventListener('cancel', event => {
+    if (submit.disabled) event.preventDefault();
+  });
+
+  dialog.addEventListener('close', () => {
+    document.getElementById('registerPassword').value = '';
+  });
+
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    if (submit.disabled) return;
+
+    const fields = Object.fromEntries(new FormData(form));
+    fields.name = fields.name.trim();
+    fields.salonName = fields.salonName.trim();
+    fields.email = fields.email.trim().toLowerCase();
+
+    if (!fields.name || !fields.salonName) {
+      status.textContent = 'Escribe tu nombre y el nombre del salón.';
+      return;
+    }
+
+    submit.disabled = true;
+    close.disabled = true;
+    status.textContent = 'Creando cuenta…';
+
+    try {
+      const response = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(fields)
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.token) {
+        throw new Error(
+          data.error || 'No se pudo crear la cuenta.'
+        );
+      }
+
+      form.reset();
+      dialog.close();
+
+      document.getElementById('loginEmail').value = fields.email;
+      document.getElementById('loginStatus').textContent =
+        'Cuenta creada. Introduce tu contraseña para entrar.';
+      document.getElementById('loginDialog').showModal();
+      document.getElementById('loginPassword').focus();
+    } catch (error) {
+      status.textContent = error.message ||
+        'No se pudo comprobar el registro. Intenta iniciar sesión antes de repetirlo.';
+    } finally {
+      submit.disabled = false;
+      close.disabled = false;
+    }
+  });
+})();
+</script></body>
 </html>
