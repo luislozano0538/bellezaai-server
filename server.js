@@ -429,6 +429,65 @@ app.get("/api/services", auth, async (req, res) => {
     res.status(500).json({ error: "No se pudieron cargar los servicios." });
   }
 });
+app.post("/api/services", auth, async (req, res) => {
+  try {
+    const {
+      name,
+      duration_minutes,
+      price_label = ""
+    } = req.body || {};
+
+    if (
+      typeof name !== "string" ||
+      !name.trim() ||
+      name.trim().length > 120
+    ) {
+      return res.status(400).json({
+        error: "Escribe un nombre de servicio de hasta 120 caracteres."
+      });
+    }
+
+    if (
+      !Number.isInteger(duration_minutes) ||
+      duration_minutes < 1 ||
+      duration_minutes > 1440
+    ) {
+      return res.status(400).json({
+        error: "La duración debe ser de 1 a 1440 minutos."
+      });
+    }
+
+    if (
+      typeof price_label !== "string" ||
+      price_label.length > 100
+    ) {
+      return res.status(400).json({
+        error: "El precio debe ser un texto de hasta 100 caracteres."
+      });
+    }
+
+    const q = await pool.query(
+      `INSERT INTO services
+        (id, salon_id, name, duration_minutes, price_label, active)
+       VALUES ($1, $2, $3, $4, $5, true)
+       RETURNING id, name, duration_minutes, price_label`,
+      [
+        crypto.randomUUID(),
+        req.user.salonId,
+        name.trim(),
+        duration_minutes,
+        price_label.trim()
+      ]
+    );
+
+    res.status(201).json(q.rows[0]);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      error: "No se pudo guardar el servicio."
+    });
+  }
+});
 
 app.post("/api/appointments", auth, async (req, res) => {
   try {
