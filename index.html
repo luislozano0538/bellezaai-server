@@ -372,5 +372,130 @@ translate();renderHome();renderAppointments();renderCustomers();
     }
   });
 })();
+</script>
+<script>
+(() => {
+  const form = document.getElementById('customerForm');
+  const saveButton = form.querySelector('button[type="submit"]');
+  const status = document.createElement('p');
+  status.setAttribute('role', 'status');
+  form.append(status);
+
+  const notice = document.createElement('p');
+  notice.setAttribute('role', 'status');
+  document.getElementById('customerList').before(notice);
+
+  let saving = false;
+  let loadVersion = 0;
+
+  function currentToken() {
+    return localStorage.getItem('bellezaAIToken') || '';
+  }
+
+  async function requestClients(method = 'GET', fields) {
+    const session = currentToken();
+    if (!session) throw new Error('Inicia sesión para usar Clientes.');
+
+    const response = await fetch('/api/clients', {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer ' + session
+      },
+      ...(fields ? {body: JSON.stringify(fields)} : {})
+    });
+
+    if (response.status === 401 || response.status === 403) {
+      throw new Error('Tu sesión venció. Inicia sesión otra vez.');
+    }
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || 'No se pudo completar la operación.');
+    }
+    return {data, session};
+  }
+
+  async function loadClients() {
+    const version = ++loadVersion;
+    customers = [];
+    renderCustomers();
+    renderHome();
+
+    if (!currentToken()) {
+      notice.textContent = 'Inicia sesión para ver tus clientes.';
+      return;
+    }
+
+    notice.textContent = 'Cargando clientes…';
+    try {
+      const {data, session} = await requestClients();
+      if (version !== loadVersion || session !== currentToken()) return;
+      if (!Array.isArray(data)) throw new Error('Respuesta inesperada.');
+
+      customers = data;
+      renderCustomers();
+      renderHome();
+      notice.textContent = '';
+    } catch (error) {
+      if (version === loadVersion) {
+        notice.textContent = error.message;
+      }
+    }
+  }
+
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    if (saving) return;
+
+    const fields = Object.fromEntries(new FormData(form));
+    fields.name = fields.name.trim();
+    if (!fields.name) {
+      status.textContent = 'Escribe el nombre del cliente.';
+      return;
+    }
+
+    saving = true;
+    saveButton.disabled = true;
+    status.textContent = 'Guardando cliente…';
+
+    try {
+      const {data, session} = await requestClients('POST', fields);
+      if (!data.id) throw new Error('No se pudo verificar el guardado.');
+
+      if (session !== currentToken()) {
+        status.textContent = 'La sesión cambió. Revisa la lista de clientes.';
+        return;
+      }
+
+      ++loadVersion;
+      customers = customers.filter(client => client.id !== data.id);
+      customers.push(data);
+      renderCustomers();
+      renderHome();
+      notice.textContent = '';
+      status.textContent = '';
+      form.reset();
+      closeModal('customerModal');
+      toast('Cliente guardado en tu cuenta');
+    } catch (error) {
+      status.textContent = error.message +
+        ' Si hubo un corte de conexión, revisa la lista antes de repetir.';
+    } finally {
+      saving = false;
+      saveButton.disabled = false;
+    }
+  }, true);
+
+  document.getElementById('loginDialog')
+    .addEventListener('close', loadClients);
+
+  window.addEventListener('storage', event => {
+    if (event.key === 'bellezaAIToken') loadClients();
+  });
+
+  loadClients();
+})();
 </script></body>
 </html>
