@@ -271,21 +271,8 @@ app.post("/api/auth/register", async (req, res) => {
     client.release();
   }
 });
-  await pool.query(
-    `INSERT INTO services
-      (id, salon_id, name, duration_minutes, price_label, active)
-     VALUES
-      ($1, $2, 'Corte', 45, '$25', true),
-      ($3, $2, 'Balayage', 180, '$120', true),
-      ($4, $2, 'Manicure', 60, '$35', true)
-     ON CONFLICT DO NOTHING`,
-    [
-      crypto.randomUUID(),
-      salonId,
-      crypto.randomUUID(),
-      crypto.randomUUID()
-    ]
-  );
+
+
 app.post("/api/auth/login", async (req, res) => {
   if (!requireConfig(res)) return;
 
