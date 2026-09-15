@@ -161,5 +161,90 @@ function translate(){document.documentElement.lang=lang;document.getElementById(
 let toastTimer;function toast(t){const el=document.getElementById('toast');el.textContent=t;el.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('show'),1900)}
 translate();renderHome();renderAppointments();renderCustomers();
 </script>
+<dialog id="loginDialog" style="border:0;border-radius:20px;padding:24px;width:min(360px,85vw)">
+  <form id="loginForm">
+    <h2>Entrar a BellezaAI</h2>
+    <p>Usa tu cuenta del salón.</p>
+
+    <label for="loginEmail">Correo electrónico</label>
+    <input id="loginEmail" type="email" required
+      autocomplete="username"
+      style="display:block;width:100%;margin:8px 0 16px">
+
+    <label for="loginPassword">Contraseña</label>
+    <input id="loginPassword" type="password" required
+      autocomplete="current-password"
+      style="display:block;width:100%;margin:8px 0 16px">
+
+    <p id="loginStatus" role="status"></p>
+    <button id="loginSubmit" type="submit">Entrar</button>
+    <button id="loginClose" type="button">Cerrar</button>
+  </form>
+</dialog>
+
+<script>
+(() => {
+  const dialog = document.getElementById('loginDialog');
+  const form = document.getElementById('loginForm');
+  const status = document.getElementById('loginStatus');
+  const submit = document.getElementById('loginSubmit');
+
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.textContent = 'Iniciar sesión';
+  button.style.cssText =
+    'display:block;margin:12px auto;padding:10px 18px;' +
+    'border:0;border-radius:12px;background:#6f3b75;color:white';
+
+  document.querySelector('.app').prepend(button);
+
+  button.addEventListener('click', () => {
+    status.textContent = '';
+    dialog.showModal();
+  });
+
+  document.getElementById('loginClose').onclick = () => {
+    dialog.close();
+  };
+
+  dialog.addEventListener('close', () => {
+    document.getElementById('loginPassword').value = '';
+  });
+
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    submit.disabled = true;
+    status.textContent = 'Comprobando cuenta…';
+
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          email: document.getElementById('loginEmail').value.trim(),
+          password: document.getElementById('loginPassword').value
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.token) {
+        throw new Error(data.error || 'No se pudo iniciar sesión.');
+      }
+
+      localStorage.setItem('bellezaAIToken', data.token);
+      token = data.token;
+      button.textContent = 'Sesión iniciada';
+      dialog.close();
+      form.reset();
+    } catch (error) {
+      status.textContent = error.message ||
+        'No se pudo conectar. Inténtalo otra vez.';
+    } finally {
+      submit.disabled = false;
+    }
+  });
+})();
+</script>
 </body>
 </html>
