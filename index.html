@@ -497,5 +497,180 @@ translate();renderHome();renderAppointments();renderCustomers();
 
   loadClients();
 })();
-</script></body>
+</script>
+
+<dialog id="servicesDialog"
+  style="width:min(90vw,440px);max-height:85vh;overflow:auto;
+  border:0;border-radius:20px;padding:24px">
+  <button type="button" id="servicesClose"
+    style="float:right" aria-label="Cerrar">✕</button>
+
+  <h2>Mis servicios</h2>
+  <p>Define los servicios de tu salón.</p>
+  <ul id="savedServices"></ul>
+
+  <h3>Nuevo servicio</h3>
+  <form id="serviceCreateForm">
+    <label>
+      Nombre
+      <input name="name" required maxlength="120"
+        placeholder="Ej. Corte de cabello"
+        style="display:block;width:100%;margin:8px 0 16px">
+    </label>
+
+    <label>
+      Duración en minutos
+      <input name="duration" type="number"
+        required min="1" max="1440" step="1"
+        placeholder="Ej. 45"
+        style="display:block;width:100%;margin:8px 0 16px">
+    </label>
+
+    <label>
+      Precio o descripción del precio
+      <input name="price" maxlength="100"
+        placeholder="Escribe el precio que tú cobras"
+        style="display:block;width:100%;margin:8px 0 16px">
+    </label>
+
+    <button type="submit" id="serviceSave">
+      Guardar servicio
+    </button>
+  </form>
+
+  <p id="servicesStatus" role="status"></p>
+</dialog>
+
+<script>
+(() => {
+  const dialog = document.getElementById('servicesDialog');
+  const form = document.getElementById('serviceCreateForm');
+  const list = document.getElementById('savedServices');
+  const status = document.getElementById('servicesStatus');
+  const save = document.getElementById('serviceSave');
+  const session = () => localStorage.getItem('bellezaAIToken') || '';
+  let busy = false;
+  let version = 0;
+
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.textContent = 'Mis servicios';
+  button.style.cssText =
+    'margin:12px;padding:12px 18px;border:0;border-radius:12px;' +
+    'background:#743b7d;color:white;font-weight:bold';
+  document.querySelector('.app').prepend(button);
+
+  async function request(method, fields) {
+    const token = session();
+    if (!token) {
+      throw new Error('Inicia sesión para usar tus servicios.');
+    }
+
+    const response = await fetch('/api/services', {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer ' + token
+      },
+      ...(fields ? { body: JSON.stringify(fields) } : {})
+    });
+
+    if (response.status === 401 || response.status === 403) {
+      throw new Error('Inicia sesión otra vez para continuar.');
+    }
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || 'No se pudo completar la operación.');
+    }
+    if (token !== session()) {
+      throw new Error('La sesión cambió. Abre Mis servicios otra vez.');
+    }
+    return data;
+  }
+
+  function showService(service) {
+    const item = document.createElement('li');
+    item.style.marginBottom = '12px';
+    item.textContent =
+      service.name + ' · ' + service.duration_minutes + ' minutos' +
+      (service.price_label ? ' · ' + service.price_label : '');
+    list.append(item);
+  }
+
+  async function loadServices() {
+    const current = ++version;
+    list.replaceChildren();
+    status.textContent = 'Cargando servicios…';
+    save.disabled = true;
+
+    try {
+      const services = await request('GET');
+      if (current !== version) return;
+      if (!Array.isArray(services)) {
+        throw new Error('No se pudo leer la lista de servicios.');
+      }
+      services.forEach(showService);
+      status.textContent = services.length
+        ? ''
+        : 'Todavía no tienes servicios guardados.';
+    } catch (error) {
+      if (current === version) {
+        status.textContent = error.message;
+      }
+    } finally {
+      if (current === version) save.disabled = busy;
+    }
+  }
+
+  button.addEventListener('click', () => {
+    dialog.showModal();
+    loadServices();
+  });
+
+  document.getElementById('servicesClose')
+    .addEventListener('click', () => dialog.close());
+
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    if (busy) return;
+
+    const fields = new FormData(form);
+    const name = String(fields.get('name')).trim();
+
+    if (!name) {
+      status.textContent = 'Escribe el nombre del servicio.';
+      return;
+    }
+
+    busy = true;
+    save.disabled = true;
+    ++version;
+    status.textContent = 'Guardando servicio…';
+
+    try {
+      const service = await request('POST', {
+        name,
+        duration_minutes: Number(fields.get('duration')),
+        price_label: String(fields.get('price')).trim()
+      });
+
+      if (!service.id) {
+        throw new Error('No se pudo verificar el guardado.');
+      }
+
+      showService(service);
+      form.reset();
+      status.textContent = 'Servicio guardado en tu cuenta.';
+    } catch (error) {
+      status.textContent = error.message +
+        ' Antes de repetir, cierra y abre Mis servicios para revisar la lista.';
+    } finally {
+      busy = false;
+      save.disabled = false;
+    }
+  });
+})();
+</script>
+</body>
 </html>
