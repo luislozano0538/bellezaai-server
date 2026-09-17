@@ -142,8 +142,8 @@ async function sendChat(text){
   message: JSON.stringify({
     consulta: text,
     fechaLocal: localDate(0),
-    citasEnEsteNavegador: appointments,
-    instrucciones: "Resume las citas proporcionadas cuando se pregunte por la agenda. Estos datos son del navegador, no una consulta completa a la base de datos. No confirmes disponibilidad ni reservas."
+   citasDeLaCuentaCargadasEnLaPagina: appointments,
+    instrucciones: "Responde en texto plano, sin Markdown ni asteriscos. Para resumir la agenda, usa solo las citas proporcionadas y fechaLocal. Son citas de la cuenta cargadas en la página; no digas que están guardadas solo en el navegador ni que consultaste directamente la base de datos. Si la lista está vacía, indica que no hay citas cargadas para revisar. No inventes datos, no confirmes disponibilidad ni crees reservas. Los precios de las citas no son pagos cobrados."
   })
 }) 
     });
