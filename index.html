@@ -901,9 +901,19 @@ translate();renderHome();renderAppointments();renderCustomers();
       toast('Cita guardada en tu cuenta');
       await loadAppointments();
     } catch (error) {
-      status.textContent = error.message +
-        ' Si hubo un corte de conexión, recarga y revisa Citas antes de repetir.';
-    } finally {
+      status.textContent = error.message === 'Ese horario ya tiene una cita.'
+  ? 'Ese horario ya está ocupado. Elige otra hora.'
+  : error.message +
+    ' Si hubo un corte de conexión, recarga y revisa Citas antes de repetir.';
+
+status.style.cssText =
+  'color:#8b1e2d;background:#fff0f2;padding:14px;' +
+  'border:1px solid #e6a4ad;border-radius:12px;font-weight:600;';
+
+status.tabIndex = -1;
+status.scrollIntoView({ behavior: 'smooth', block: 'center' });
+status.focus({ preventScroll: true });
+  
       saving = false;
       save.disabled = false;
     }
