@@ -672,5 +672,257 @@ translate();renderHome();renderAppointments();renderCustomers();
   });
 })();
 </script>
+<script>
+(() => {
+  const form = document.getElementById('appointmentForm');
+  const save = form.querySelector('button[type="submit"]');
+  const serviceSelect = form.elements.namedItem('service');
+  const oldName = form.elements.namedItem('name');
+  const price = form.elements.namedItem('price');
+
+  const clientSelect = document.createElement('select');
+  clientSelect.name = 'clientId';
+  clientSelect.required = true;
+  oldName.replaceWith(clientSelect);
+  serviceSelect.required = true;
+
+  price.type = 'text';
+  price.readOnly = true;
+  price.placeholder = 'Precio del servicio';
+
+  const status = document.createElement('p');
+  status.setAttribute('role', 'status');
+  form.append(status);
+
+  const notice = document.createElement('p');
+  notice.setAttribute('role', 'status');
+  document.getElementById('appointmentList').before(notice);
+
+  const timezone = document.createElement('p');
+  timezone.textContent =
+    'Horario de este dispositivo: ' +
+    Intl.DateTimeFormat().resolvedOptions().timeZone;
+  form.append(timezone);
+
+  const session = () =>
+    localStorage.getItem('bellezaAIToken') || '';
+
+  let services = [];
+  let clients = [];
+  let saving = false;
+  let formVersion = 0;
+  let listVersion = 0;
+
+  async function api(path, method = 'GET', body) {
+    const token = session();
+    if (!token) throw new Error('Inicia sesión para usar Citas.');
+
+    const response = await fetch('/api/' + path, {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer ' + token
+      },
+      ...(body ? { body: JSON.stringify(body) } : {})
+    });
+
+    if (token !== session()) {
+      throw new Error('La sesión cambió. Abre Citas otra vez.');
+    }
+    if (response.status === 401 || response.status === 403) {
+      throw new Error('Tu sesión venció. Inicia sesión otra vez.');
+    }
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || 'No se pudo completar la operación.');
+    }
+    return data;
+  }
+
+  function options(select, rows, placeholder) {
+    select.replaceChildren(new Option(placeholder, ''));
+    rows.forEach(row => {
+      select.add(new Option(row.name, row.id));
+    });
+  }
+
+  function updatePrice() {
+    const service = services.find(s => s.id === serviceSelect.value);
+    price.value = service ? service.price_label || '' : '';
+  }
+
+  serviceSelect.addEventListener('change', updatePrice);
+
+  function mapAppointment(row) {
+    const date = new Date(row.starts_at);
+    if (Number.isNaN(date.getTime())) {
+      throw new Error('Una cita tiene una fecha inválida.');
+    }
+    const pad = n => String(n).padStart(2, '0');
+    const rawPrice = String(row.price || '').trim();
+    const numericPrice = Number(rawPrice);
+
+    return {
+      ...row,
+      date: date.getFullYear() + '-' +
+        pad(date.getMonth() + 1) + '-' + pad(date.getDate()),
+      time: pad(date.getHours()) + ':' + pad(date.getMinutes()),
+      price: Number.isFinite(numericPrice) ? numericPrice : 0,
+      priceLabel: rawPrice
+    };
+  }
+
+  const originalAppointmentHTML = appointmentHTML;
+  appointmentHTML = function(appointment, showDate = true) {
+    const container = document.createElement('div');
+    container.innerHTML =
+      originalAppointmentHTML(appointment, showDate);
+
+    const amount = container.querySelector('.price');
+    if (amount && appointment.priceLabel !== undefined) {
+      amount.textContent = appointment.priceLabel || 'Sin precio';
+    }
+    const badge = container.querySelector('.badge');
+    if (badge && appointment.status !== 'confirmed') {
+      badge.textContent = appointment.status;
+    }
+    return container.innerHTML;
+  };
+
+  function render() {
+    renderAppointments();
+    renderHome();
+    const today = appointments.filter(a => a.date === localDate(0));
+    if (today.some(a =>
+      a.priceLabel && !Number.isFinite(Number(a.priceLabel))
+    )) {
+      document.getElementById('income').textContent = '—';
+    }
+  }
+
+  async function loadAppointments() {
+    const current = ++listVersion;
+    appointments = [];
+    render();
+    notice.textContent = 'Cargando citas…';
+
+    try {
+      const rows = await api('appointments');
+      if (current !== listVersion) return;
+      if (!Array.isArray(rows)) {
+        throw new Error('No se pudo leer la lista de citas.');
+      }
+      appointments = rows
+        .filter(row => row.status !== 'cancelled')
+        .map(mapAppointment);
+      render();
+      notice.textContent = '';
+    } catch (error) {
+      if (current === listVersion) {
+        notice.textContent = error.message;
+      }
+    }
+  }
+
+  openAppointment = async function() {
+    if (saving) return;
+    const current = ++formVersion;
+    form.reset();
+    form.elements.namedItem('date').value = localDate(0);
+    form.elements.namedItem('time').value = '09:00';
+    options(clientSelect, [], 'Cargando clientes…');
+    options(serviceSelect, [], 'Cargando servicios…');
+    clients = [];
+    services = [];
+    save.disabled = true;
+    status.textContent = 'Cargando datos de tu cuenta…';
+    openModal('appointmentModal');
+
+    try {
+      const data = await Promise.all([
+        api('clients'),
+        api('services')
+      ]);
+      if (current !== formVersion) return;
+      if (!data.every(Array.isArray)) {
+        throw new Error('No se pudieron leer clientes y servicios.');
+      }
+
+      [clients, services] = data;
+      options(clientSelect, clients, 'Selecciona un cliente');
+      options(serviceSelect, services, 'Selecciona un servicio');
+
+      if (!clients.length) {
+        status.textContent = 'Primero añade un cliente en Clientes.';
+      } else if (!services.length) {
+        status.textContent = 'Primero añade un servicio en Mis servicios.';
+      } else {
+        status.textContent = '';
+        save.disabled = false;
+      }
+    } catch (error) {
+      if (current === formVersion) status.textContent = error.message;
+    }
+  };
+
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    if (saving || save.disabled) return;
+
+    const client = clients.find(c => c.id === clientSelect.value);
+    const service = services.find(s => s.id === serviceSelect.value);
+    const date = form.elements.namedItem('date').value;
+    const time = form.elements.namedItem('time').value;
+    const start = new Date(date + 'T' + time);
+
+    if (!client || !service || Number.isNaN(start.getTime())) {
+      status.textContent = 'Selecciona cliente, servicio, fecha y hora.';
+      return;
+    }
+
+    saving = true;
+    save.disabled = true;
+    status.textContent = 'Guardando cita…';
+
+    try {
+      const result = await api('appointments', 'POST', {
+        clientId: client.id,
+        serviceId: service.id,
+        startsAt: start.toISOString()
+      });
+
+      if (!result.id) {
+        throw new Error('No se pudo verificar el guardado.');
+      }
+
+      closeModal('appointmentModal');
+      toast('Cita guardada en tu cuenta');
+      await loadAppointments();
+    } catch (error) {
+      status.textContent = error.message +
+        ' Si hubo un corte de conexión, recarga y revisa Citas antes de repetir.';
+    } finally {
+      saving = false;
+      save.disabled = false;
+    }
+  }, true);
+
+  document.getElementById('loginDialog')
+    .addEventListener('close', loadAppointments);
+
+  window.addEventListener('storage', event => {
+    if (event.key === 'bellezaAIToken') {
+      ++formVersion;
+      save.disabled = true;
+      closeModal('appointmentModal');
+      loadAppointments();
+    }
+  });
+
+  loadAppointments();
+})();
+</script>
 </body>
 </html>
