@@ -354,6 +354,8 @@ app.get("/api/appointments", auth, async (req, res) => {
        a.id,
        a.starts_at,
        a.ends_at,
+       a.client_id,
+       a.service_id,
        a.status,
        c.name,
        c.phone,
@@ -491,6 +493,8 @@ app.post("/api/services", auth, async (req, res) => {
 });
 
 app.post("/api/appointments", auth, async (req, res) => {
+  let db;
+  let committed = false;
   try {
     const { clientId, serviceId, startsAt, notes = "", professionalId = null } = req.body || {};
 
@@ -498,7 +502,10 @@ app.post("/api/appointments", auth, async (req, res) => {
       return res.status(400).json({ error: "Faltan datos de la cita." });
     }
 
-    const service = await pool.query(
+    db = await pool.connect();
+    await db.query("BEGIN");
+    await db.query("SELECT pg_advisory_xact_lock(hashtext($1))", [req.user.salonId]);
+    const service = await db.query(
       `SELECT id, duration_minutes
        FROM services
        WHERE id=$1 AND salon_id=$2 AND active=true`,
@@ -509,7 +516,7 @@ app.post("/api/appointments", auth, async (req, res) => {
       return res.status(404).json({ error: "Servicio no encontrado." });
     }
 
-    const client = await pool.query(
+    const client = await db.query(
       `SELECT id FROM clients
        WHERE id=$1 AND salon_id=$2`,
       [clientId, req.user.salonId]
@@ -521,7 +528,7 @@ app.post("/api/appointments", auth, async (req, res) => {
 
     // Validar profesional si se proporciona
     if (professionalId) {
-      const professional = await pool.query(
+      const professional = await db.query(
         `SELECT id FROM professionals
          WHERE id=$1 AND salon_id=$2 AND active=true`,
         [professionalId, req.user.salonId]
@@ -549,12 +556,13 @@ app.post("/api/appointments", auth, async (req, res) => {
 
     if (professionalId) {
       conflictQuery = `SELECT id FROM appointments
-        WHERE professional_id=$1
+        WHERE (professional_id=$1 OR professional_id IS NULL)
+        AND salon_id=$4
         AND status<>'cancelled'
         AND starts_at < $3
         AND ends_at > $2
         LIMIT 1`;
-      conflictParams = [professionalId, start, end];
+      conflictParams = [professionalId, start, end, req.user.salonId];
     } else {
       conflictQuery = `SELECT id FROM appointments
         WHERE salon_id=$1
@@ -565,7 +573,7 @@ app.post("/api/appointments", auth, async (req, res) => {
       conflictParams = [req.user.salonId, start, end];
     }
 
-    const conflict = await pool.query(conflictQuery, conflictParams);
+    const conflict = await db.query(conflictQuery, conflictParams);
 
     if (conflict.rows[0]) {
       return res.status(409).json({
@@ -575,7 +583,7 @@ app.post("/api/appointments", auth, async (req, res) => {
 
     const id = crypto.randomUUID();
 
-    const q = await pool.query(
+    const q = await db.query(
       `WITH appointment AS (
        INSERT INTO appointments
        (id, salon_id, client_id, service_id, professional_id, starts_at, ends_at, status, notes)
@@ -604,10 +612,112 @@ app.post("/api/appointments", auth, async (req, res) => {
       ]
     );
 
+    await db.query("COMMIT");
+    committed = true;
     res.status(201).json(q.rows[0]);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "No se pudo guardar la cita." });
+  } finally {
+    if (db) {
+      if (!committed) await db.query("ROLLBACK").catch(() => {});
+      db.release();
+    }
+  }
+});
+
+
+app.patch("/api/appointments/:id", auth, async (req, res) => {
+  const id = req.params.id;
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+    return res.status(400).json({ error: "Cita inválida." });
+  }
+  const body = req.body || {};
+  if (body.status !== undefined && body.status !== "cancelled") {
+    return res.status(400).json({ error: "Estado de cita no permitido." });
+  }
+  let db;
+  let committed = false;
+  try {
+    db = await pool.connect();
+    await db.query("BEGIN");
+    await db.query("SELECT pg_advisory_xact_lock(hashtext($1))", [req.user.salonId]);
+    const existing = await db.query(
+      "SELECT * FROM appointments WHERE id=$1 AND salon_id=$2 FOR UPDATE",
+      [id, req.user.salonId]
+    );
+    const appointment = existing.rows[0];
+    if (!appointment) return res.status(404).json({ error: "Cita no encontrada." });
+
+    let result;
+    if (body.status === "cancelled") {
+      result = await db.query(
+        "UPDATE appointments SET status='cancelled' WHERE id=$1 AND salon_id=$2 RETURNING *",
+        [id, req.user.salonId]
+      );
+      await db.query(
+        "UPDATE reminders SET status='cancelled' WHERE appointment_id=$1 AND sent_at IS NULL AND status<>'sent'",
+        [id]
+      );
+    } else {
+      if (appointment.status !== "confirmed") {
+        return res.status(409).json({ error: "Solo puedes editar citas confirmadas." });
+      }
+      const { clientId, serviceId, startsAt } = body;
+      const start = new Date(startsAt);
+      if (!clientId || !serviceId || !startsAt || Number.isNaN(start.getTime()) || start <= new Date()) {
+        return res.status(400).json({ error: "Selecciona cliente, servicio y una fecha futura." });
+      }
+      const client = await db.query(
+        "SELECT id FROM clients WHERE id=$1 AND salon_id=$2", [clientId, req.user.salonId]
+      );
+      const service = await db.query(
+        "SELECT duration_minutes FROM services WHERE id=$1 AND salon_id=$2 AND active=true",
+        [serviceId, req.user.salonId]
+      );
+      if (!client.rows[0] || !service.rows[0]) {
+        return res.status(404).json({ error: "Cliente o servicio no encontrado en tu salón." });
+      }
+      const end = new Date(start.getTime() + service.rows[0].duration_minutes * 60000);
+      const conflict = await db.query(
+        `SELECT id FROM appointments
+         WHERE salon_id=$1 AND id<>$2 AND status<>'cancelled'
+           AND starts_at<$4 AND ends_at>$3
+           AND ($5::uuid IS NULL OR professional_id=$5 OR professional_id IS NULL)
+         LIMIT 1`,
+        [req.user.salonId, id, start, end, appointment.professional_id]
+      );
+      if (conflict.rows[0]) return res.status(409).json({ error: "Ese horario ya tiene una cita." });
+      result = await db.query(
+        `UPDATE appointments SET client_id=$3, service_id=$4, starts_at=$5, ends_at=$6
+         WHERE id=$1 AND salon_id=$2 RETURNING *`,
+        [id, req.user.salonId, clientId, serviceId, start, end]
+      );
+      // Keep sent history, cancel all unsent notices, and prepare one replacement.
+      await db.query(
+        "UPDATE reminders SET status='cancelled' WHERE appointment_id=$1 AND sent_at IS NULL AND status<>'sent'",
+        [id]
+      );
+      await db.query(
+        `INSERT INTO reminders(id, appointment_id, status, scheduled_at)
+         VALUES($1,$2,
+           CASE WHEN $3::timestamptz - INTERVAL '24 hours' <= NOW()
+                THEN 'skipped' ELSE 'awaiting_connection' END,
+           $3::timestamptz - INTERVAL '24 hours')`,
+        [crypto.randomUUID(), id, start]
+      );
+    }
+    await db.query("COMMIT");
+    committed = true;
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "No se pudo actualizar la cita." });
+  } finally {
+    if (db) {
+      if (!committed) await db.query("ROLLBACK").catch(() => {});
+      db.release();
+    }
   }
 });
 
