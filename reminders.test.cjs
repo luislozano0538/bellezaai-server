@@ -9,7 +9,12 @@ function route(path, method, query) {
   const end = source.indexOf('\napp.', start + 1);
   const auth = () => {};
   const context = {app: {[method](p, middleware, fn) {assert.equal(middleware, auth); handler = fn;}},
-    auth, pool: {query}, crypto: require('node:crypto'), console: {error() {}}};
+    auth, pool: {query, async connect() { return {
+      async query(sql, values) {
+        if (['BEGIN', 'COMMIT', 'ROLLBACK'].includes(sql) || sql.includes('pg_advisory_xact_lock')) return {rows: []};
+        return query(sql, values);
+      }, release() {}
+    }; }}, crypto: require('node:crypto'), console: {error() {}}};
   vm.runInNewContext(source.slice(start, end), context);
   const res = {code: 200, status(n) {this.code = n; return this;}, json(body) {this.body = body;}};
   return {handler, res};
