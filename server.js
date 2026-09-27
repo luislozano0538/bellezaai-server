@@ -492,6 +492,69 @@ app.post("/api/services", auth, async (req, res) => {
   }
 });
 
+app.patch("/api/services/:id", auth, async (req, res) => {
+  try {
+    const {
+      name,
+      duration_minutes,
+      price_label = ""
+    } = req.body || {};
+
+    if (
+      typeof name !== "string" ||
+      !name.trim() ||
+      name.trim().length > 120
+    ) {
+      return res.status(400).json({
+        error: "Escribe un nombre de servicio de hasta 120 caracteres."
+      });
+    }
+
+    if (
+      !Number.isInteger(duration_minutes) ||
+      duration_minutes < 1 ||
+      duration_minutes > 1440
+    ) {
+      return res.status(400).json({
+        error: "La duración debe ser de 1 a 1440 minutos."
+      });
+    }
+
+    if (
+      typeof price_label !== "string" ||
+      price_label.length > 100
+    ) {
+      return res.status(400).json({
+        error: "El precio debe ser un texto de hasta 100 caracteres."
+      });
+    }
+
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.params.id)) {
+      return res.status(400).json({error: "Servicio inválido."});
+    }
+    const q = await pool.query(
+      `UPDATE services SET name=$3, duration_minutes=$4, price_label=$5
+       WHERE id=$1 AND salon_id=$2 AND active=true
+       RETURNING id, name, duration_minutes, price_label`,
+      [
+        req.params.id,
+        req.user.salonId,
+        name.trim(),
+        duration_minutes,
+        price_label.trim()
+      ]
+    );
+
+    if (!q.rows.length) return res.status(404).json({error: "Servicio no encontrado."});
+    res.json(q.rows[0]);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      error: "No se pudo guardar el servicio."
+    });
+  }
+});
+
 app.post("/api/appointments", auth, async (req, res) => {
   let db;
   let committed = false;
