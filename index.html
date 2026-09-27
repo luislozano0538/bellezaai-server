@@ -60,7 +60,7 @@
     <section class="view" id="appointments">
       <div class="pagebar"><h1 class="page-title" data-t="appointments">Citas</h1><button class="add" onclick="openAppointment()">+</button></div>
       <input class="search" id="appointmentSearch" data-ph="searchAppointments" placeholder="Buscar cita o servicio" oninput="renderAppointments()">
-      <div class="chips"><button class="chip on" data-filter="all" onclick="setFilter(this,'all')" data-t="all">Todas</button><button class="chip" data-filter="today" onclick="setFilter(this,'today')" data-t="today">Hoy</button><button class="chip" data-filter="confirmed" onclick="setFilter(this,'confirmed')" data-t="confirmed">Confirmadas</button></div>
+      <div class="chips"><button class="chip on" data-filter="all" onclick="setFilter(this,'all')" data-t="all">Todas</button><button class="chip" data-filter="today" onclick="setFilter(this,'today')" data-t="today">Hoy</button><button class="chip" data-filter="confirmed" onclick="setFilter(this,'confirmed')" data-t="confirmed">Confirmadas</button><button class="chip" data-filter="cancelled" onclick="setFilter(this,'cancelled')">Canceladas</button></div>
       <div id="appointmentList"></div>
     </section>
 
@@ -160,11 +160,11 @@ async function loadReminders() {
 }
 function prettyDate(date){return new Intl.DateTimeFormat(lang==='es'?'es-US':'en-US',{weekday:'short',month:'short',day:'numeric'}).format(new Date(date+'T12:00:00'))}
 function prettyTime(t){let [h,m]=t.split(':').map(Number);const ap=h>=12?'PM':'AM';h=h%12||12;return `${h}:${String(m).padStart(2,'0')} ${ap}`}
-function renderHome(){const todays=appointments.filter(a=>a.date===localDate(0));document.getElementById('todayCount').textContent=todays.length;document.getElementById('clientCount').textContent=customers.length;document.getElementById('income').textContent='$'+todays.reduce((s,a)=>s+Number(a.price||0),0);document.getElementById('homeAppointments').innerHTML=(appointments.filter(a=>a.date>=localDate(0)).sort(sortAppt).slice(0,3).map(a=>appointmentHTML(a,false)).join('')||emptyHTML(tr[lang].noAppointments))}
+function renderHome(){const todays=appointments.filter(a=>a.status!=='cancelled'&&a.date===localDate(0));document.getElementById('todayCount').textContent=todays.length;document.getElementById('clientCount').textContent=customers.length;document.getElementById('income').textContent='$'+todays.reduce((s,a)=>s+Number(a.price||0),0);document.getElementById('homeAppointments').innerHTML=(appointments.filter(a=>a.status!=='cancelled'&&a.date>=localDate(0)).sort(sortAppt).slice(0,3).map(a=>appointmentHTML(a,false)).join('')||emptyHTML(tr[lang].noAppointments))}
 function sortAppt(a,b){return (a.date+a.time).localeCompare(b.date+b.time)}
 function appointmentHTML(a,showDate=true){return `<div class="item"><div class="timebox">${showDate?esc(prettyDate(a.date))+'<br>':''}${esc(prettyTime(a.time))}</div><div class="grow"><div class="item-title">${esc(a.name)}</div><div class="item-sub">${esc(a.service)} · <span class="badge">${tr[lang].confirmed}</span></div></div><div class="price">$${Number(a.price||0)}</div></div>`}
 function emptyHTML(t){return `<div class="empty"><b>${esc(t)}</b>Usa el botón + para comenzar.</div>`}
-function renderAppointments(){const q=(document.getElementById('appointmentSearch').value||'').toLowerCase();let rows=appointments.filter(a=>(filter!=='today'||a.date===localDate(0))&&(filter!=='confirmed'||a.status==='confirmed')&&(a.name+' '+a.service).toLowerCase().includes(q)).sort(sortAppt);document.getElementById('appointmentList').innerHTML=rows.map(a=>appointmentHTML(a,true)).join('')||emptyHTML(tr[lang].noAppointments)}
+function renderAppointments(){const q=(document.getElementById('appointmentSearch').value||'').toLowerCase();let rows=appointments.filter(a=>(filter!=='today'||a.date===localDate(0))&&(filter!=='confirmed'||a.status==='confirmed')&&(filter!=='cancelled'||a.status==='cancelled')&&(a.name+' '+a.service).toLowerCase().includes(q)).sort(sortAppt);document.getElementById('appointmentList').innerHTML=rows.map(a=>appointmentHTML(a,true)).join('')||emptyHTML(tr[lang].noAppointments)}
 function setFilter(el,f){filter=f;document.querySelectorAll('.chip').forEach(c=>c.classList.toggle('on',c===el));renderAppointments()}
 function initials(n){return n.split(/\s+/).slice(0,2).map(x=>x[0]).join('').toUpperCase()}
 function renderCustomers(){const q=(document.getElementById('customerSearch').value||'').toLowerCase();const rows=customers.filter(c=>(c.name+' '+c.phone+' '+c.email).toLowerCase().includes(q));document.getElementById('customerList').innerHTML=rows.map(c=>`<div class="item"><div class="customer-avatar">${esc(initials(c.name))}</div><div class="grow"><div class="item-title">${esc(c.name)}</div><div class="customer-meta">${esc(c.phone||c.email||'')} · ${c.visits||0} ${tr[lang].visits}</div></div><button class="ghost" onclick="toast('💬 ${lang==='es'?'Mensaje listo':'Message ready'}')">💬</button></div>`).join('')||emptyHTML(tr[lang].noCustomers)}
@@ -767,6 +767,7 @@ translate();renderHome();renderAppointments();renderCustomers();
   let services = [];
   let clients = [];
   let saving = false;
+  let editingId = null;
   let formVersion = 0;
   let listVersion = 0;
 
@@ -842,15 +843,54 @@ translate();renderHome();renderAppointments();renderCustomers();
     }
     const badge = container.querySelector('.badge');
     if (badge && appointment.status !== 'confirmed') {
-      badge.textContent = appointment.status;
+      badge.textContent = appointment.status === 'cancelled' ? (lang === 'es' ? 'Cancelada' : 'Cancelled') : appointment.status;
+    }
+    if (appointment.status === 'confirmed') {
+      const actions = document.createElement('div');
+      actions.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;margin:0 0 16px';
+      for (const [label, action] of [[lang === 'es' ? 'Editar / Reprogramar' : 'Edit / Reschedule', 'edit'], [lang === 'es' ? 'Cancelar cita' : 'Cancel appointment', 'cancel']]) {
+        const button = document.createElement('button');
+        button.className = 'ghost';
+        button.type = 'button';
+        button.textContent = label;
+        button.dataset.appointmentAction = action;
+        button.dataset.appointmentId = appointment.id;
+        actions.append(button);
+      }
+      container.append(actions);
     }
     return container.innerHTML;
   };
+  document.addEventListener('click', async event => {
+    const button = event.target.closest('[data-appointment-action]');
+    if (!button || saving) return;
+    const id = button.dataset.appointmentId;
+    const appointment = appointments.find(row => row.id === id);
+    if (!appointment) return;
+    if (button.dataset.appointmentAction === 'edit') {
+      await openAppointment(id);
+      return;
+    }
+    if (!confirm('¿Cancelar la cita de ' + appointment.name + ' del ' + prettyDate(appointment.date) + ' a las ' + prettyTime(appointment.time) + '? También se cancelará su recordatorio.')) return;
+    saving = true;
+    button.disabled = true;
+    try {
+      await api('appointments/' + encodeURIComponent(id), 'PATCH', {status: 'cancelled'});
+      toast('Cita y recordatorio cancelados');
+      await loadAppointments();
+    } catch (error) {
+      notice.textContent = error.message;
+      toast(error.message);
+    } finally {
+      saving = false;
+      button.disabled = false;
+    }
+  });
 
   function render() {
     renderAppointments();
     renderHome();
-    const today = appointments.filter(a => a.date === localDate(0));
+    const today = appointments.filter(a => a.status !== 'cancelled' && a.date === localDate(0));
     if (today.some(a =>
       a.priceLabel && !Number.isFinite(Number(a.priceLabel))
     )) {
@@ -870,9 +910,7 @@ translate();renderHome();renderAppointments();renderCustomers();
       if (!Array.isArray(rows)) {
         throw new Error('No se pudo leer la lista de citas.');
       }
-      appointments = rows
-        .filter(row => row.status !== 'cancelled')
-        .map(mapAppointment);
+      appointments = rows.map(mapAppointment);
       render();
       notice.textContent = '';
     } catch (error) {
@@ -882,9 +920,15 @@ translate();renderHome();renderAppointments();renderCustomers();
     }
   }
 
-  openAppointment = async function() {
+  openAppointment = async function(id = null) {
     if (saving) return;
     const current = ++formVersion;
+    const selected = id ? appointments.find(row => row.id === id) : null;
+    if (id && (!selected || selected.status !== 'confirmed')) return;
+    editingId = selected ? selected.id : null;
+    const heading = document.querySelector('#appointmentModal h2');
+    heading.textContent = editingId ? 'Editar / Reprogramar cita' : tr[lang].newAppointment;
+    status.style.cssText = '';
     form.reset();
     form.elements.namedItem('date').value = localDate(0);
     form.elements.namedItem('time').value = '09:00';
@@ -909,6 +953,13 @@ translate();renderHome();renderAppointments();renderCustomers();
       [clients, services] = data;
       options(clientSelect, clients, 'Selecciona un cliente');
       options(serviceSelect, services, 'Selecciona un servicio');
+      if (selected) {
+        clientSelect.value = selected.client_id;
+        serviceSelect.value = selected.service_id;
+        form.elements.namedItem('date').value = selected.date;
+        form.elements.namedItem('time').value = selected.time;
+        updatePrice();
+      }
 
       if (!clients.length) {
         status.textContent = 'Primero añade un cliente en Clientes.';
@@ -944,7 +995,7 @@ translate();renderHome();renderAppointments();renderCustomers();
     status.textContent = 'Guardando cita…';
 
     try {
-      const result = await api('appointments', 'POST', {
+      const result = await api(editingId ? 'appointments/' + encodeURIComponent(editingId) : 'appointments', editingId ? 'PATCH' : 'POST', {
         clientId: client.id,
         serviceId: service.id,
         startsAt: start.toISOString()
@@ -955,7 +1006,7 @@ translate();renderHome();renderAppointments();renderCustomers();
       }
 
       closeModal('appointmentModal');
-      toast('Cita guardada en tu cuenta');
+      toast(editingId ? 'Cita y recordatorio actualizados' : 'Cita guardada en tu cuenta');
       await loadAppointments();
     } catch (error) {
       status.textContent = error.message === 'Ese horario ya tiene una cita.'
@@ -971,6 +1022,7 @@ status.tabIndex = -1;
 status.scrollIntoView({ behavior: 'smooth', block: 'center' });
 status.focus({ preventScroll: true });
   
+    } finally {
       saving = false;
       save.disabled = false;
     }
