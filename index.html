@@ -245,14 +245,28 @@ translate();renderHome();renderAppointments();renderCustomers();
 
   const button = document.createElement('button');
   button.type = 'button';
-  button.textContent = 'Iniciar sesión';
+  button.textContent = token ? 'Cerrar sesión' : 'Iniciar sesión';
   button.style.cssText =
     'display:block;margin:12px auto;padding:10px 18px;' +
     'border:0;border-radius:12px;background:#6f3b75;color:white';
 
   document.querySelector('.app').prepend(button);
 
+  window.addEventListener('storage', event => {
+    if (event.key === 'bellezaAIToken' || event.key === null) {
+      document.body.replaceChildren();
+      location.reload();
+    }
+  });
+
   button.addEventListener('click', () => {
+    if (localStorage.getItem('bellezaAIToken')) {
+      localStorage.removeItem('bellezaAIToken');
+      token = '';
+      document.body.replaceChildren();
+      location.reload();
+      return;
+    }
     status.textContent = '';
     dialog.showModal();
   });
@@ -288,7 +302,7 @@ translate();renderHome();renderAppointments();renderCustomers();
 
       localStorage.setItem('bellezaAIToken', data.token);
       token = data.token;
-      button.textContent = 'Sesión iniciada';
+      button.textContent = 'Cerrar sesión';
       dialog.close();
       form.reset();
     } catch (error) {
