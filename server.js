@@ -576,10 +576,21 @@ app.post("/api/appointments", auth, async (req, res) => {
     const id = crypto.randomUUID();
 
     const q = await pool.query(
-      `INSERT INTO appointments
+      `WITH appointment AS (
+       INSERT INTO appointments
        (id, salon_id, client_id, service_id, professional_id, starts_at, ends_at, status, notes)
        VALUES ($1,$2,$3,$4,$5,$6,$7,'confirmed',$8)
-       RETURNING *`,
+       RETURNING *
+       ), reminder AS (
+         INSERT INTO reminders(id, appointment_id, status, scheduled_at)
+         SELECT $9, id,
+                CASE WHEN starts_at - INTERVAL '24 hours' <= NOW()
+                     THEN 'skipped' ELSE 'awaiting_connection' END,
+                starts_at - INTERVAL '24 hours'
+         FROM appointment
+         RETURNING id
+       )
+       SELECT appointment.* FROM appointment CROSS JOIN reminder`,
       [
         id,
         req.user.salonId,
@@ -588,7 +599,8 @@ app.post("/api/appointments", auth, async (req, res) => {
         professionalId,
         start,
         end,
-        notes
+        notes,
+        crypto.randomUUID()
       ]
     );
 
@@ -600,6 +612,31 @@ app.post("/api/appointments", auth, async (req, res) => {
 });
 
 // ==================== ENDPOINTS DE PROFESIONALES ====================
+
+// Preparation only: no provider is connected and no messages are sent.
+app.get("/api/reminders", auth, async (req, res) => {
+  try {
+    const q = await pool.query(
+      `SELECT r.id, r.scheduled_at, a.starts_at,
+              c.name AS client_name, s.name AS service_name,
+              CASE WHEN r.scheduled_at <= NOW() THEN 'expired'
+                   ELSE 'awaiting_connection' END AS status
+       FROM reminders r
+       JOIN appointments a ON a.id=r.appointment_id
+       JOIN clients c ON c.id=a.client_id AND c.salon_id=a.salon_id
+       JOIN services s ON s.id=a.service_id AND s.salon_id=a.salon_id
+       WHERE a.salon_id=$1
+         AND a.status='confirmed' AND a.starts_at > NOW()
+         AND r.status IN ('awaiting_connection', 'skipped')
+       ORDER BY r.scheduled_at, r.id`,
+      [req.user.salonId]
+    );
+    res.json({ connected: false, hoursBefore: 24, reminders: q.rows });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "No se pudieron cargar los recordatorios." });
+  }
+});
 
 // GET /api/professionals - Listar todos los profesionales del salón
 app.get("/api/professionals", auth, async (req, res) => {

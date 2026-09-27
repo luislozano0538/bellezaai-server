@@ -73,7 +73,7 @@
     <section class="view" id="settings">
       <div class="pagebar"><h1 class="page-title" data-t="settings">Ajustes</h1></div>
       <div class="setting-group"><div class="setting-title" data-t="salon">Salón</div><div class="setting"><span class="setting-icon">🏪</span><div><b data-t="salonName">Nombre del salón</b><div class="small">Mi Salón de Belleza</div></div></div><div class="setting"><span class="setting-icon">🕘</span><div><b data-t="hours">Horario</b><div class="small">9:00 AM – 6:00 PM</div></div></div></div>
-      <div class="setting-group"><div class="setting-title" data-t="assistant">Asistente</div><div class="setting"><span class="setting-icon">🤖</span><div><b data-t="autoReplies">Respuestas automáticas</b><div class="small" data-t="autoRepliesSub">Contestar preguntas frecuentes</div></div><button class="toggle on" onclick="this.classList.toggle('on')" aria-label="toggle"></button></div><div class="setting"><span class="setting-icon">🔔</span><div><b data-t="reminders">Recordatorios</b><div class="small" data-t="remindersSub">24 horas antes de cada cita</div></div><button class="toggle on" onclick="this.classList.toggle('on')" aria-label="toggle"></button></div><div class="setting"><span class="setting-icon">⭐</span><div><b data-t="reviewRequests">Solicitar reseñas</b><div class="small" data-t="reviewSub">Después de cada servicio</div></div><button class="toggle on" onclick="this.classList.toggle('on')" aria-label="toggle"></button></div></div>
+      <div class="setting-group"><div class="setting-title" data-t="assistant">Asistente</div><div class="setting"><span class="setting-icon">🤖</span><div><b data-t="autoReplies">Respuestas automáticas</b><div class="small" data-t="autoRepliesSub">Contestar preguntas frecuentes</div></div><button class="toggle on" onclick="this.classList.toggle('on')" aria-label="toggle"></button></div><div class="setting"><span class="setting-icon">🔔</span><div><b data-t="reminders">Recordatorios</b><div class="small" data-t="remindersSub">24 horas antes de cada cita</div><p id="reminderNotice"></p><button class="ghost" id="refreshReminders" type="button" onclick="loadReminders()">Actualizar</button><p id="reminderTimezone" class="small"></p><div id="reminderList" aria-live="polite"></div></div></div><div class="setting"><span class="setting-icon">⭐</span><div><b data-t="reviewRequests">Solicitar reseñas</b><div class="small" data-t="reviewSub">Después de cada servicio</div></div><button class="toggle on" onclick="this.classList.toggle('on')" aria-label="toggle"></button></div></div>
       <div class="setting-group"><div class="setting-title" data-t="preferences">Preferencias</div><div class="setting"><span class="setting-icon">🌐</span><b data-t="language">Idioma</b><select class="select" id="language" onchange="changeLanguage(this.value)"><option value="es">Español</option><option value="en">English</option></select></div><div class="setting"><span class="setting-icon">📊</span><div><b data-t="reports">Reportes</b><div class="small" data-t="reportsSub">Resumen semanal del negocio</div></div></div></div>
       <div class="version">BellezaAI MVP · Versión 1.0</div>
     </section>
@@ -103,7 +103,61 @@ const tr={
 es:{salonPanel:'Panel inteligente de tu salón',hello:'Hola, Luis 👋',todayAppointments:'Citas hoy',newMessages:'Mensajes nuevos',clients:'Clientes',todayIncome:'Valor de citas hoy',yourAI:'Tu asistente IA',aiIntro:'Responde clientes, revisa horarios y ayuda a llenar tu agenda las 24 horas.',talkAI:'Hablar con mi IA',nextAppointments:'Próximas citas',seeAll:'Ver todas',lastMessage:'Último mensaje',clientQuestion:'“¿Tienen disponibilidad el viernes para un balayage?”',aiAnswer:'“Sí. Tengo espacio a las 10:00 a. m. ¿Deseas reservar?”',appointments:'Citas',customers:'Clientes',settings:'Ajustes',home:'Inicio',all:'Todas',today:'Hoy',confirmed:'Confirmadas',salon:'Salón',salonName:'Nombre del salón',hours:'Horario',assistant:'Asistente',autoReplies:'Respuestas automáticas',autoRepliesSub:'Contestar preguntas frecuentes',reminders:'Recordatorios',remindersSub:'24 horas antes de cada cita',reviewRequests:'Solicitar reseñas',reviewSub:'Después de cada servicio',preferences:'Preferencias',language:'Idioma',reports:'Reportes',reportsSub:'Resumen semanal del negocio',newAppointment:'Nueva cita',clientName:'Nombre del cliente',service:'Servicio',date:'Fecha',time:'Hora',price:'Precio',saveAppointment:'Guardar cita',newCustomer:'Nuevo cliente',name:'Nombre',phone:'Teléfono',saveCustomer:'Guardar cliente',online:'● En línea · Español/English',checkSchedule:'Revisar agenda',replyCustomer:'Responder cliente',todaySummary:'Resumen de hoy',searchAppointments:'Buscar cita o servicio',searchCustomers:'Buscar cliente',askAI:'Pregúntale a tu asistente…',noAppointments:'No hay citas',noCustomers:'No hay clientes',visits:'visitas',saved:'Guardado correctamente',botHello:'Hola, Luis. Soy tu asistente de BellezaAI. ¿En qué te ayudo con el salón?'},
 en:{salonPanel:'Your salon smart dashboard',hello:'Hello, Luis 👋',todayAppointments:"Today's appointments",newMessages:'New messages',clients:'Clients',todayIncome:"Today's income",yourAI:'Your AI assistant',aiIntro:'Answers clients, checks availability and helps fill your schedule 24/7.',talkAI:'Talk to my AI',nextAppointments:'Upcoming appointments',seeAll:'See all',lastMessage:'Latest message',clientQuestion:'“Do you have availability Friday for a balayage?”',aiAnswer:'“Yes. I have an opening at 10:00 a.m. Would you like to book it?”',appointments:'Appointments',customers:'Clients',settings:'Settings',home:'Home',all:'All',today:'Today',confirmed:'Confirmed',salon:'Salon',salonName:'Salon name',hours:'Business hours',assistant:'Assistant',autoReplies:'Automatic replies',autoRepliesSub:'Answer frequently asked questions',reminders:'Reminders',remindersSub:'24 hours before every appointment',reviewRequests:'Request reviews',reviewSub:'After every service',preferences:'Preferences',language:'Language',reports:'Reports',reportsSub:'Weekly business summary',newAppointment:'New appointment',clientName:'Client name',service:'Service',date:'Date',time:'Time',price:'Price',saveAppointment:'Save appointment',newCustomer:'New client',name:'Name',phone:'Phone',saveCustomer:'Save client',online:'● Online · Español/English',checkSchedule:'Check schedule',replyCustomer:'Reply to client',todaySummary:"Today's summary",searchAppointments:'Search appointment or service',searchCustomers:'Search client',askAI:'Ask your assistant…',noAppointments:'No appointments',noCustomers:'No clients',visits:'visits',saved:'Saved successfully',botHello:'Hi, Luis. I am your BellezaAI assistant. How can I help with the salon?'}};
 function esc(s){return String(s).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
-function showView(id){document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active',v.id===id));document.querySelectorAll('.navbtn').forEach(b=>b.classList.toggle('active',b.dataset.view===id));if(id==='appointments')renderAppointments();if(id==='customers')renderCustomers();window.scrollTo(0,0)}
+function showView(id){document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active',v.id===id));document.querySelectorAll('.navbtn').forEach(b=>b.classList.toggle('active',b.dataset.view===id));if(id==='appointments')renderAppointments();if(id==='customers')renderCustomers();if(id==='settings')loadReminders();window.scrollTo(0,0)}
+let reminderRequest = 0;
+async function loadReminders() {
+  const requestId = ++reminderRequest;
+  const es = lang === 'es';
+  const list = document.getElementById('reminderList');
+  document.getElementById('reminderNotice').textContent = es
+    ? 'WhatsApp pendiente de conectar. Se prepara un aviso para cada cita nueva; todavía no se envían mensajes.'
+    : 'WhatsApp is not connected. A reminder is prepared for each new appointment; no messages are sent yet.';
+  document.getElementById('refreshReminders').textContent = es ? 'Actualizar' : 'Refresh';
+  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  document.getElementById('reminderTimezone').textContent =
+    (es ? 'Horas mostradas en: ' : 'Times shown in: ') + zone;
+  const session = localStorage.getItem('bellezaAIToken') || '';
+  list.textContent = es ? 'Cargando…' : 'Loading…';
+  if (!session) {
+    list.textContent = es ? 'Inicia sesión para ver los recordatorios.' : 'Sign in to view reminders.';
+    return;
+  }
+  try {
+    const response = await fetch('/api/reminders', {
+      headers: { Authorization: 'Bearer ' + session }
+    });
+    const data = await response.json();
+    if (requestId !== reminderRequest || session !== (localStorage.getItem('bellezaAIToken') || '')) return;
+    if (!response.ok) throw new Error(response.status === 401
+      ? (es ? 'Tu sesión venció. Vuelve a iniciar sesión.' : 'Your session expired. Please sign in again.')
+      : (es ? 'No se pudieron cargar los recordatorios. Pulsa Actualizar para reintentar.' : 'Could not load reminders. Select Refresh to retry.'));
+    list.replaceChildren();
+    if (!data.reminders.length) {
+      list.textContent = es ? 'No hay avisos preparados para próximas citas.' : 'No reminders prepared for upcoming appointments.';
+    }
+    const format = value => new Intl.DateTimeFormat(es ? 'es' : 'en', {
+      dateStyle: 'medium', timeStyle: 'short'
+    }).format(new Date(value));
+    for (const reminder of data.reminders) {
+      const item = document.createElement('p');
+      const name = document.createElement('strong');
+      name.textContent = reminder.client_name + ' · ' + reminder.service_name;
+      item.append(name, document.createElement('br'));
+      const detail = document.createElement('span');
+      detail.textContent = (es ? 'Cita: ' : 'Appointment: ') + format(reminder.starts_at)
+        + ' — ' + (es ? 'Aviso previsto: ' : 'Planned reminder: ') + format(reminder.scheduled_at);
+      item.append(detail, document.createElement('br'));
+      const status = document.createElement('span');
+      status.textContent = reminder.status === 'expired'
+        ? (es ? 'Hora del aviso pasada · No enviado' : 'Reminder time passed · Not sent')
+        : (es ? 'WhatsApp pendiente de conectar · No enviado' : 'WhatsApp not connected · Not sent');
+      item.append(status);
+      list.append(item);
+    }
+  } catch (error) {
+    if (requestId === reminderRequest) list.textContent = error.message;
+  }
+}
 function prettyDate(date){return new Intl.DateTimeFormat(lang==='es'?'es-US':'en-US',{weekday:'short',month:'short',day:'numeric'}).format(new Date(date+'T12:00:00'))}
 function prettyTime(t){let [h,m]=t.split(':').map(Number);const ap=h>=12?'PM':'AM';h=h%12||12;return `${h}:${String(m).padStart(2,'0')} ${ap}`}
 function renderHome(){const todays=appointments.filter(a=>a.date===localDate(0));document.getElementById('todayCount').textContent=todays.length;document.getElementById('clientCount').textContent=customers.length;document.getElementById('income').textContent='$'+todays.reduce((s,a)=>s+Number(a.price||0),0);document.getElementById('homeAppointments').innerHTML=(appointments.filter(a=>a.date>=localDate(0)).sort(sortAppt).slice(0,3).map(a=>appointmentHTML(a,false)).join('')||emptyHTML(tr[lang].noAppointments))}
@@ -159,7 +213,7 @@ async function sendChat(text){
   box.scrollTop=box.scrollHeight;
 }
 
-function changeLanguage(v){lang=v;localStorage.setItem('bellezaAILang',v);translate();renderHome();renderAppointments();renderCustomers();document.getElementById('messages').innerHTML=''}
+function changeLanguage(v){lang=v;localStorage.setItem('bellezaAILang',v);translate();renderHome();renderAppointments();renderCustomers();if(document.getElementById('settings').classList.contains('active'))loadReminders();document.getElementById('messages').innerHTML=''}
 function translate(){document.documentElement.lang=lang;document.getElementById('language').value=lang;document.querySelectorAll('[data-t]').forEach(el=>{const k=el.dataset.t;if(tr[lang][k])el.textContent=tr[lang][k]});document.querySelectorAll('[data-ph]').forEach(el=>el.placeholder=tr[lang][el.dataset.ph]);document.getElementById('today').textContent=new Intl.DateTimeFormat(lang==='es'?'es-US':'en-US',{weekday:'long',month:'long',day:'numeric'}).format(new Date())}
 let toastTimer;function toast(t){const el=document.getElementById('toast');el.textContent=t;el.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('show'),1900)}
 translate();renderHome();renderAppointments();renderCustomers();
