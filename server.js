@@ -104,6 +104,10 @@ async function initDatabase() {
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
 
+    ALTER TABLE appointments ADD COLUMN IF NOT EXISTS price_label_snapshot TEXT;
+    UPDATE appointments a SET price_label_snapshot=COALESCE(s.price_label,'')
+      FROM services s WHERE a.service_id=s.id AND a.salon_id=s.salon_id AND a.price_label_snapshot IS NULL;
+
     CREATE TABLE IF NOT EXISTS reminders (
       id UUID PRIMARY KEY,
       appointment_id UUID NOT NULL REFERENCES appointments(id) ON DELETE CASCADE,
@@ -356,7 +360,7 @@ app.post("/api/salon/check-hours", auth, async (req, res) => {
   }
   try {
     const q = await pool.query("SELECT business_hours FROM salons WHERE id=$1", [req.user.salonId]);
-    const services = await pool.query("SELECT duration_minutes FROM services WHERE id=$1 AND salon_id=$2 AND active=true",
+    const services = await pool.query("SELECT duration_minutes, price_label FROM services WHERE id=$1 AND salon_id=$2 AND active=true",
       [req.body.serviceId,req.user.salonId]);
     if (!services.rows.length) return res.status(404).json({error:"Servicio no encontrado."});
     const hours = q.rows[0]?.business_hours || null;
@@ -439,7 +443,7 @@ app.get("/api/appointments", auth, async (req, res) => {
        c.name,
        c.phone,
        s.name AS service,
-       s.price_label AS price,
+       a.price_label_snapshot AS price,
        p.name AS professional_name,
        a.professional_id
      FROM appointments a
@@ -697,7 +701,7 @@ app.post("/api/appointments", auth, async (req, res) => {
     await db.query("BEGIN");
     await db.query("SELECT pg_advisory_xact_lock(hashtext($1))", [req.user.salonId]);
     const service = await db.query(
-      `SELECT id, duration_minutes
+      `SELECT id, duration_minutes, price_label
        FROM services
        WHERE id=$1 AND salon_id=$2 AND active=true`,
       [serviceId, req.user.salonId]
@@ -777,8 +781,8 @@ app.post("/api/appointments", auth, async (req, res) => {
     const q = await db.query(
       `WITH appointment AS (
        INSERT INTO appointments
-       (id, salon_id, client_id, service_id, professional_id, starts_at, ends_at, status, notes)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,'confirmed',$8)
+       (id, salon_id, client_id, service_id, professional_id, starts_at, ends_at, status, notes, price_label_snapshot)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,'confirmed',$8,$10)
        RETURNING *
        ), reminder AS (
          INSERT INTO reminders(id, appointment_id, status, scheduled_at)
@@ -799,7 +803,8 @@ app.post("/api/appointments", auth, async (req, res) => {
         start,
         end,
         notes,
-        crypto.randomUUID()
+        crypto.randomUUID(),
+        service.rows[0].price_label || ""
       ]
     );
 
@@ -880,9 +885,10 @@ app.patch("/api/appointments/:id", auth, async (req, res) => {
       );
       if (conflict.rows[0]) return res.status(409).json({ error: "Ese horario ya tiene una cita." });
       result = await db.query(
-        `UPDATE appointments SET client_id=$3, service_id=$4, starts_at=$5, ends_at=$6
+        `UPDATE appointments SET client_id=$3, service_id=$4, starts_at=$5, ends_at=$6,
+         price_label_snapshot=CASE WHEN service_id=$4 THEN price_label_snapshot ELSE $7 END
          WHERE id=$1 AND salon_id=$2 RETURNING *`,
-        [id, req.user.salonId, clientId, serviceId, start, end]
+        [id, req.user.salonId, clientId, serviceId, start, end, service.rows[0].price_label || ""]
       );
       // Keep sent history, cancel all unsent notices, and prepare one replacement.
       await db.query(

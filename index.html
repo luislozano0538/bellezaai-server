@@ -865,7 +865,10 @@ translate();renderHome();renderAppointments();renderCustomers();
 
   function updatePrice() {
     const service = services.find(s => s.id === serviceSelect.value);
-    price.value = service ? service.price_label || '' : '';
+    const existing = editingId ? appointments.find(a => a.id === editingId) : null;
+    price.value = existing && existing.service_id === serviceSelect.value
+      ? existing.priceLabel || ''
+      : service ? service.price_label || '' : '';
   }
 
   serviceSelect.addEventListener('change', updatePrice);
