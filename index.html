@@ -164,9 +164,15 @@ function emptyHTML(t){return `<div class="empty"><b>${esc(t)}</b>Usa el botón +
 function renderAppointments(){const q=(document.getElementById('appointmentSearch').value||'').toLowerCase();let rows=appointments.filter(a=>(filter!=='today'||a.date===localDate(0))&&(filter!=='confirmed'||a.status==='confirmed')&&(filter!=='cancelled'||a.status==='cancelled')&&(a.name+' '+a.service).toLowerCase().includes(q)).sort(sortAppt);document.getElementById('appointmentList').innerHTML=rows.map(a=>appointmentHTML(a,true)).join('')||emptyHTML(tr[lang].noAppointments)}
 function setFilter(el,f){filter=f;document.querySelectorAll('.chip').forEach(c=>c.classList.toggle('on',c===el));renderAppointments()}
 function initials(n){return n.split(/\s+/).slice(0,2).map(x=>x[0]).join('').toUpperCase()}
-function renderCustomers(){const q=(document.getElementById('customerSearch').value||'').toLowerCase();const rows=customers.filter(c=>(c.name+' '+c.phone+' '+c.email).toLowerCase().includes(q));document.getElementById('customerList').innerHTML=rows.map(c=>`<div class="item"><div class="customer-avatar">${esc(initials(c.name))}</div><div class="grow"><div class="item-title">${esc(c.name)}</div><div class="customer-meta">${esc(c.phone||c.email||'')} · ${c.visits||0} ${tr[lang].visits}</div></div><button class="ghost" onclick="toast('💬 ${lang==='es'?'Mensaje listo':'Message ready'}')">💬</button></div>`).join('')||emptyHTML(tr[lang].noCustomers)}
+function renderCustomers(){const q=(document.getElementById('customerSearch').value||'').toLowerCase();const rows=customers.filter(c=>(c.name+' '+c.phone+' '+c.email).toLowerCase().includes(q));document.getElementById('customerList').innerHTML=rows.map(c=>`<div class="item"><div class="customer-avatar">${esc(initials(c.name))}</div><div class="grow"><div class="item-title">${esc(c.name)}</div><div class="customer-meta">${esc(c.phone||c.email||'')} · ${c.visits||0} ${tr[lang].visits}</div></div><button class="ghost" data-edit-client="${esc(c.id)}">Editar</button></div>`).join('')||emptyHTML(tr[lang].noCustomers)}
 function openAppointment(){const f=document.getElementById('appointmentForm');f.reset();f.date.value=localDate(0);f.time.value='09:00';openModal('appointmentModal')}
-function openCustomer(){document.getElementById('customerForm').reset();openModal('customerModal')}
+let editingClientId = null;
+function openCustomer(){
+ editingClientId = null;
+ document.getElementById('customerForm').reset();
+ document.querySelector('#customerModal h2').textContent = tr[lang].newCustomer;
+ openModal('customerModal');
+}
 function openModal(id){document.getElementById(id).classList.add('show');document.body.style.overflow='hidden'}
 function closeModal(id){document.getElementById(id).classList.remove('show');document.body.style.overflow=''}
 function backdrop(e,id){if(e.target.id===id)closeModal(id)}
@@ -456,15 +462,28 @@ translate();renderHome();renderAppointments();renderCustomers();
   let saving = false;
   let loadVersion = 0;
 
+  document.getElementById('customerList').addEventListener('click', event => {
+    const edit = event.target.closest('[data-edit-client]');
+    if (!edit || saving) return;
+    const client = customers.find(c => c.id === edit.dataset.editClient);
+    if (!client) return;
+    form.reset();
+    editingClientId = client.id;
+    for (const key of ['name', 'phone', 'email']) form.elements.namedItem(key).value = client[key] || '';
+    document.querySelector('#customerModal h2').textContent = 'Editar cliente';
+    status.textContent = '';
+    openModal('customerModal');
+  });
+
   function currentToken() {
     return localStorage.getItem('bellezaAIToken') || '';
   }
 
-  async function requestClients(method = 'GET', fields) {
+  async function requestClients(method = 'GET', fields, id) {
     const session = currentToken();
     if (!session) throw new Error('Inicia sesión para usar Clientes.');
 
-    const response = await fetch('/api/clients', {
+    const response = await fetch('/api/clients' + (id ? '/' + encodeURIComponent(id) : ''), {
       method,
       headers: {
         'Content-Type': 'application/json',
@@ -529,7 +548,7 @@ translate();renderHome();renderAppointments();renderCustomers();
     status.textContent = 'Guardando cliente…';
 
     try {
-      const {data, session} = await requestClients('POST', fields);
+      const {data, session} = await requestClients(editingClientId ? 'PATCH' : 'POST', fields, editingClientId);
       if (!data.id) throw new Error('No se pudo verificar el guardado.');
 
       if (session !== currentToken()) {
