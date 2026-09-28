@@ -69,7 +69,7 @@
 
     <section class="view" id="settings">
       <div class="pagebar"><h1 class="page-title" data-t="settings">Ajustes</h1></div>
-      <div class="setting-group"><div class="setting-title" data-t="salon">Salón</div><div class="setting"><span class="setting-icon">🏪</span><div><b data-t="salonName">Nombre del salón</b><div class="small">Mi Salón de Belleza</div></div></div><div class="setting"><span class="setting-icon">🕘</span><div><b data-t="hours">Horario</b><div class="small">9:00 AM – 6:00 PM</div></div></div></div>
+      <div class="setting-group"><div class="setting-title" data-t="salon">Salón</div><div class="setting"><span class="setting-icon">🏪</span><div><b data-t="salonName">Nombre del salón</b><form id="salonForm"><input id="salonNameInput" aria-label="Nombre del salón" required maxlength="120" disabled style="display:block;width:100%;box-sizing:border-box;margin:10px 0"><button class="ghost" id="salonSave" disabled>Guardar nombre</button><p id="salonStatus" role="status"></p></form></div></div><div class="setting"><span class="setting-icon">🕘</span><div><b data-t="hours">Horario</b><div class="small">9:00 AM – 6:00 PM</div></div></div></div>
       <div class="setting-group"><div class="setting-title" data-t="assistant">Asistente</div><div class="setting"><span class="setting-icon">🤖</span><div><b data-t="autoReplies">Respuestas automáticas</b><div class="small" data-t="autoRepliesSub">Contestar preguntas frecuentes</div></div><button class="toggle on" onclick="this.classList.toggle('on')" aria-label="toggle"></button></div><div class="setting"><span class="setting-icon">🔔</span><div><b data-t="reminders">Recordatorios</b><div class="small" data-t="remindersSub">24 horas antes de cada cita</div><p id="reminderNotice"></p><button class="ghost" id="refreshReminders" type="button" onclick="loadReminders()">Actualizar</button><p id="reminderTimezone" class="small"></p><div id="reminderList" aria-live="polite"></div></div></div><div class="setting"><span class="setting-icon">⭐</span><div><b data-t="reviewRequests">Solicitar reseñas</b><div class="small" data-t="reviewSub">Después de cada servicio</div></div><button class="toggle on" onclick="this.classList.toggle('on')" aria-label="toggle"></button></div></div>
       <div class="setting-group"><div class="setting-title" data-t="preferences">Preferencias</div><div class="setting"><span class="setting-icon">🌐</span><b data-t="language">Idioma</b><select class="select" id="language" onchange="changeLanguage(this.value)"><option value="es">Español</option><option value="en">English</option></select></div><div class="setting"><span class="setting-icon">📊</span><div><b data-t="reports">Reportes</b><div class="small" data-t="reportsSub">Resumen semanal del negocio</div></div></div></div>
       <div class="version">BellezaAI MVP · Versión 1.0</div>
@@ -1153,6 +1153,60 @@ status.focus({ preventScroll: true });
      if (current === version) status.textContent = error.message;
    }
  });
+})();
+</script>
+
+
+<script>
+(() => {
+ const form = document.getElementById('salonForm');
+ const input = document.getElementById('salonNameInput');
+ const save = document.getElementById('salonSave');
+ const status = document.getElementById('salonStatus');
+ const label = document.createElement('div');
+ label.className = 'small';
+ label.style.color = 'white';
+ document.querySelector('.top').append(label);
+ let version = 0;
+ const session = () => localStorage.getItem('bellezaAIToken') || '';
+ async function request(method, name) {
+   const token = session();
+   if (!token) throw new Error('Inicia sesión para configurar tu salón.');
+   const response = await fetch('/api/salon', {
+     method, headers: {'Content-Type':'application/json',Authorization:'Bearer ' + token},
+     ...(method === 'PATCH' ? {body:JSON.stringify({name})} : {})
+   });
+   const data = await response.json();
+   if (token !== session()) throw new Error('La sesión cambió. Recarga la página.');
+   if (!response.ok) throw new Error(data.error || 'No se pudo completar la operación.');
+   return data;
+ }
+ async function load() {
+   const current = ++version;
+   input.disabled = save.disabled = true;
+   input.value = ''; label.textContent = '';
+   try {
+     const data = await request('GET');
+     if (current !== version) return;
+     input.value = label.textContent = data.name;
+     input.disabled = save.disabled = false;
+     status.textContent = '';
+   } catch(error) { if(current === version) status.textContent = error.message; }
+ }
+ form.addEventListener('submit', async event => {
+   event.preventDefault();
+   if (save.disabled) return;
+   save.disabled = input.disabled = true;
+   status.textContent = 'Guardando…';
+   try {
+     const data = await request('PATCH', input.value.trim());
+     input.value = label.textContent = data.name;
+     status.textContent = 'Nombre del salón guardado.';
+   } catch(error) { status.textContent = error.message; }
+   finally { save.disabled = input.disabled = false; }
+ });
+ document.getElementById('loginDialog').addEventListener('close', load);
+ load();
 })();
 </script>
 

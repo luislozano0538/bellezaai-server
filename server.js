@@ -310,6 +310,30 @@ app.post("/api/auth/login", async (req, res) => {
   res.json({ token });
 });
 
+app.get("/api/salon", auth, async (req, res) => {
+  try {
+    const q = await pool.query("SELECT name FROM salons WHERE id=$1", [req.user.salonId]);
+    if (!q.rows.length) return res.status(404).json({error: "Salón no encontrado."});
+    res.json(q.rows[0]);
+  } catch (error) {
+    res.status(500).json({error: "No se pudo cargar el salón."});
+  }
+});
+app.patch("/api/salon", auth, async (req, res) => {
+  if (req.user.role !== "owner") return res.status(403).json({error: "Solo el propietario puede editar el salón."});
+  const {name} = req.body || {};
+  if (typeof name !== "string" || !name.trim() || name.trim().length > 120) {
+    return res.status(400).json({error: "Escribe un nombre de hasta 120 caracteres."});
+  }
+  try {
+    const q = await pool.query("UPDATE salons SET name=$2 WHERE id=$1 RETURNING name", [req.user.salonId, name.trim()]);
+    if (!q.rows.length) return res.status(404).json({error: "Salón no encontrado."});
+    res.json(q.rows[0]);
+  } catch (error) {
+    res.status(500).json({error: "No se pudo guardar el salón."});
+  }
+});
+
 app.get("/api/dashboard", auth, async (req, res) => {
   const sid = req.user.salonId;
 
