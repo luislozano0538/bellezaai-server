@@ -416,6 +416,30 @@ app.post("/api/clients", auth, async (req, res) => {
   }
 });
 
+app.patch("/api/clients/:id", auth, async (req, res) => {
+  const {name, phone = "", email = ""} = req.body || {};
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.params.id) ||
+      typeof name !== "string" || !name.trim() || name.trim().length > 120 ||
+      typeof phone !== "string" || phone.length > 80 ||
+      typeof email !== "string" || email.length > 254 ||
+      (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()))) {
+    return res.status(400).json({error: "Revisa el nombre, teléfono y correo del cliente."});
+  }
+  try {
+    const q = await pool.query(
+      `UPDATE clients SET name=$3, phone=$4, email=$5
+       WHERE id=$1 AND salon_id=$2
+       RETURNING id, name, phone, email, notes, created_at`,
+      [req.params.id, req.user.salonId, name.trim(), phone.trim(), email.trim()]
+    );
+    if (!q.rows.length) return res.status(404).json({error: "Cliente no encontrado."});
+    res.json(q.rows[0]);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({error: "No se pudo actualizar el cliente."});
+  }
+});
+
 app.get("/api/services", auth, async (req, res) => {
   try {
     const q = await pool.query(
