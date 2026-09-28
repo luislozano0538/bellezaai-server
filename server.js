@@ -416,6 +416,31 @@ app.post("/api/clients", auth, async (req, res) => {
   }
 });
 
+app.get("/api/clients/:id/history", auth, async (req, res) => {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.params.id)) {
+    return res.status(400).json({error: "Cliente inválido."});
+  }
+  try {
+    const client = await pool.query(
+      "SELECT id, name FROM clients WHERE id=$1 AND salon_id=$2",
+      [req.params.id, req.user.salonId]
+    );
+    if (!client.rows.length) return res.status(404).json({error: "Cliente no encontrado."});
+    const result = await pool.query(
+      `SELECT a.id, a.starts_at, a.ends_at, a.status, s.name AS service
+       FROM appointments a
+       LEFT JOIN services s ON s.id=a.service_id AND s.salon_id=a.salon_id
+       WHERE a.client_id=$1 AND a.salon_id=$2
+       ORDER BY a.starts_at DESC, a.id`,
+      [req.params.id, req.user.salonId]
+    );
+    res.json({client: client.rows[0], appointments: result.rows});
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({error: "No se pudo cargar el historial."});
+  }
+});
+
 app.patch("/api/clients/:id", auth, async (req, res) => {
   const {name, phone = "", email = ""} = req.body || {};
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.params.id) ||
