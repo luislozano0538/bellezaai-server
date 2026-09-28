@@ -27,6 +27,8 @@ async function initDatabase() {
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
 
+    ALTER TABLE salons ADD COLUMN IF NOT EXISTS business_hours JSONB;
+
     CREATE TABLE IF NOT EXISTS users (
       id UUID PRIMARY KEY,
       salon_id UUID NOT NULL REFERENCES salons(id) ON DELETE CASCADE,
@@ -308,6 +310,59 @@ app.post("/api/auth/login", async (req, res) => {
   );
 
   res.json({ token });
+});
+
+
+function validBusinessHours(value) {
+  if (!value || typeof value.timezone !== "string" || !Array.isArray(value.days) || value.days.length !== 7) return false;
+  try { new Intl.DateTimeFormat("en", {timeZone:value.timezone}).format(); } catch { return false; }
+  return value.days.every(day => day && typeof day.open === "boolean" &&
+    (!day.open || (typeof day.start === "string" && typeof day.end === "string" &&
+    /^([01]\d|2[0-3]):[0-5]\d$/.test(day.start) && /^([01]\d|2[0-3]):[0-5]\d$/.test(day.end) && day.start < day.end)));
+}
+function withinBusinessHours(hours, start, end) {
+  if (!hours) return null;
+  const formatter = new Intl.DateTimeFormat("en-US", {timeZone:hours.timezone, weekday:"short",
+    year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hourCycle:"h23"});
+  const parts = date => Object.fromEntries(formatter.formatToParts(date).map(p => [p.type,p.value]));
+  const a = parts(start), b = parts(end);
+  const day = hours.days[["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].indexOf(a.weekday)];
+  return !!day?.open && a.year === b.year && a.month === b.month && a.day === b.day &&
+    a.hour + ":" + a.minute >= day.start && b.hour + ":" + b.minute <= day.end;
+}
+
+app.get("/api/salon/hours", auth, async (req, res) => {
+  try {
+    const q = await pool.query("SELECT business_hours FROM salons WHERE id=$1", [req.user.salonId]);
+    res.json({hours:q.rows[0]?.business_hours || null});
+  } catch { res.status(500).json({error:"No se pudo cargar el horario."}); }
+});
+app.patch("/api/salon/hours", auth, async (req, res) => {
+  if (req.user.role !== "owner") return res.status(403).json({error:"Solo el propietario puede editar el horario."});
+  if (!validBusinessHours(req.body)) return res.status(400).json({error:"Revisa la zona horaria y las horas de apertura y cierre."});
+  const hours = {timezone:req.body.timezone, days:req.body.days.map(day => day.open ?
+    {open:true,start:day.start,end:day.end} : {open:false})};
+  try {
+    const q = await pool.query("UPDATE salons SET business_hours=$2 WHERE id=$1 RETURNING business_hours",
+      [req.user.salonId, JSON.stringify(hours)]);
+    if (!q.rows.length) return res.status(404).json({error:"Salón no encontrado."});
+    res.json({hours:q.rows[0].business_hours});
+  } catch { res.status(500).json({error:"No se pudo guardar el horario."}); }
+});
+app.post("/api/salon/check-hours", auth, async (req, res) => {
+  const start = new Date(req.body?.startsAt);
+  if (Number.isNaN(start.getTime()) || !/^[0-9a-f-]{36}$/i.test(req.body?.serviceId || "")) {
+    return res.status(400).json({error:"Selecciona servicio, fecha y hora."});
+  }
+  try {
+    const q = await pool.query("SELECT business_hours FROM salons WHERE id=$1", [req.user.salonId]);
+    const services = await pool.query("SELECT duration_minutes FROM services WHERE id=$1 AND salon_id=$2 AND active=true",
+      [req.body.serviceId,req.user.salonId]);
+    if (!services.rows.length) return res.status(404).json({error:"Servicio no encontrado."});
+    const hours = q.rows[0]?.business_hours || null;
+    const end = new Date(start.getTime() + services.rows[0].duration_minutes * 60000);
+    res.json({configured:!!hours, within:withinBusinessHours(hours,start,end), timezone:hours?.timezone || null});
+  } catch { res.status(500).json({error:"No se pudo comprobar el horario."}); }
 });
 
 app.get("/api/salon", auth, async (req, res) => {

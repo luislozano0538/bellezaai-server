@@ -69,7 +69,7 @@
 
     <section class="view" id="settings">
       <div class="pagebar"><h1 class="page-title" data-t="settings">Ajustes</h1></div>
-      <div class="setting-group"><div class="setting-title" data-t="salon">Salón</div><div class="setting"><span class="setting-icon">🏪</span><div><b data-t="salonName">Nombre del salón</b><form id="salonForm"><input id="salonNameInput" aria-label="Nombre del salón" required maxlength="120" disabled style="display:block;width:100%;box-sizing:border-box;margin:10px 0"><button class="ghost" id="salonSave" disabled>Guardar nombre</button><p id="salonStatus" role="status"></p></form></div></div><div class="setting"><span class="setting-icon">🕘</span><div><b data-t="hours">Horario</b><div class="small">9:00 AM – 6:00 PM</div></div></div></div>
+      <div class="setting-group"><div class="setting-title" data-t="salon">Salón</div><div class="setting"><span class="setting-icon">🏪</span><div><b data-t="salonName">Nombre del salón</b><form id="salonForm"><input id="salonNameInput" aria-label="Nombre del salón" required maxlength="120" disabled style="display:block;width:100%;box-sizing:border-box;margin:10px 0"><button class="ghost" id="salonSave" disabled>Guardar nombre</button><p id="salonStatus" role="status"></p></form></div></div><div class="setting"><span class="setting-icon">🕘</span><div><b data-t="hours">Horario</b><form id="hoursForm"><p class="small">Configura los días de atención. La agenda avisa si una cita empieza o termina fuera de este horario.</p><label>Zona horaria<input id="hoursTimezone" required aria-label="Zona horaria" style="display:block;width:100%;box-sizing:border-box"></label><div id="hoursDays"></div><button class="ghost" id="hoursSave" disabled>Guardar horario</button><p id="hoursStatus" role="status"></p></form></div></div></div>
       <div class="setting-group"><div class="setting-title" data-t="assistant">Asistente</div><div class="setting"><span class="setting-icon">🤖</span><div><b data-t="autoReplies">Respuestas automáticas</b><div class="small" data-t="autoRepliesSub">Contestar preguntas frecuentes</div></div><button class="toggle on" onclick="this.classList.toggle('on')" aria-label="toggle"></button></div><div class="setting"><span class="setting-icon">🔔</span><div><b data-t="reminders">Recordatorios</b><div class="small" data-t="remindersSub">24 horas antes de cada cita</div><p id="reminderNotice"></p><button class="ghost" id="refreshReminders" type="button" onclick="loadReminders()">Actualizar</button><p id="reminderTimezone" class="small"></p><div id="reminderList" aria-live="polite"></div></div></div><div class="setting"><span class="setting-icon">⭐</span><div><b data-t="reviewRequests">Solicitar reseñas</b><div class="small" data-t="reviewSub">Después de cada servicio</div></div><button class="toggle on" onclick="this.classList.toggle('on')" aria-label="toggle"></button></div></div>
       <div class="setting-group"><div class="setting-title" data-t="preferences">Preferencias</div><div class="setting"><span class="setting-icon">🌐</span><b data-t="language">Idioma</b><select class="select" id="language" onchange="changeLanguage(this.value)"><option value="es">Español</option><option value="en">English</option></select></div><div class="setting"><span class="setting-icon">📊</span><div><b data-t="reports">Reportes</b><div class="small" data-t="reportsSub">Resumen semanal del negocio</div></div></div></div>
       <div class="version">BellezaAI MVP · Versión 1.0</div>
@@ -1053,6 +1053,12 @@ translate();renderHome();renderAppointments();renderCustomers();
     status.textContent = 'Guardando cita…';
 
     try {
+      const hoursCheck = await api('salon/check-hours', 'POST', {serviceId:service.id, startsAt:start.toISOString()});
+      if (hoursCheck.configured && !hoursCheck.within &&
+          !confirm('Esta cita empieza o termina fuera del horario del salón (' + hoursCheck.timezone + '). ¿Quieres guardarla de todos modos?')) {
+        status.textContent = 'Elige otra fecha u hora.';
+        return;
+      }
       const result = await api(editingId ? 'appointments/' + encodeURIComponent(editingId) : 'appointments', editingId ? 'PATCH' : 'POST', {
         clientId: client.id,
         serviceId: service.id,
@@ -1206,6 +1212,80 @@ status.focus({ preventScroll: true });
    finally { save.disabled = input.disabled = false; }
  });
  document.getElementById('loginDialog').addEventListener('close', load);
+ load();
+})();
+</script>
+
+
+<script>
+(() => {
+ const form = document.getElementById('hoursForm'), days = document.getElementById('hoursDays');
+ const zone = document.getElementById('hoursTimezone'), status = document.getElementById('hoursStatus');
+ const save = document.getElementById('hoursSave');
+ const names = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+ const fields = names.map(name => {
+   const row = document.createElement('div');
+   row.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:10px 0';
+   const label = document.createElement('label'), check = document.createElement('input');
+   check.type = 'checkbox'; label.append(check, document.createTextNode(name));
+   const start = document.createElement('input'), end = document.createElement('input');
+   start.type = end.type = 'time';
+   start.setAttribute('aria-label','Apertura '+name); end.setAttribute('aria-label','Cierre '+name);
+   start.style.width = end.style.width = '105px';
+   start.value = '09:00'; end.value = '18:00';
+   start.disabled = end.disabled = true;
+   check.onchange = () => { start.disabled = end.disabled = !check.checked; };
+   row.append(label,start,end); days.append(row);
+   return {check,start,end};
+ });
+ const session = () => localStorage.getItem('bellezaAIToken') || '';
+ let version = 0, busy = false;
+ async function request(method, body) {
+   const token = session();
+   if (!token) throw new Error('Inicia sesión para configurar el horario.');
+   const response = await fetch('/api/salon/hours', {method,
+     headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},
+     ...(body ? {body:JSON.stringify(body)} : {})});
+   const data = await response.json();
+   if (token !== session()) throw new Error('La sesión cambió. Recarga la página.');
+   if (!response.ok) throw new Error(data.error || 'No se pudo guardar el horario.');
+   return data;
+ }
+ function show(hours) {
+   zone.value = hours?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+   fields.forEach((f,i) => {
+     const day = hours?.days[i];
+     f.check.checked = !!day?.open;
+     f.start.value = day?.start || '09:00'; f.end.value = day?.end || '18:00';
+     f.check.onchange();
+   });
+ }
+ async function load() {
+   const current = ++version;
+   save.disabled = true;
+   try {
+     const data = await request('GET');
+     if (current !== version) return;
+     show(data.hours);
+     status.textContent = data.hours ? 'Horario guardado del salón.' : 'Horario sin configurar. Selecciona los días y revisa las horas antes de guardar.';
+     save.disabled = false;
+   } catch(error) { if(current === version) status.textContent = error.message; }
+ }
+ form.onsubmit = async event => {
+   event.preventDefault();
+   if (busy || save.disabled) return;
+   const body = {timezone:zone.value.trim(),days:fields.map(f => ({open:f.check.checked,start:f.start.value,end:f.end.value}))};
+   if (body.days.some(d => d.open && (!d.start || !d.end || d.start >= d.end))) {
+     status.textContent = 'Cada día abierto debe cerrar después de la apertura.'; return;
+   }
+   busy = true; save.disabled = true; status.textContent = 'Guardando…';
+   try {
+     const data = await request('PATCH',body); show(data.hours);
+     status.textContent = 'Horario guardado. Las citas existentes no cambian.';
+   } catch(error) { status.textContent = error.message; }
+   finally { busy = false; save.disabled = false; }
+ };
+ document.getElementById('loginDialog').addEventListener('close',load);
  load();
 })();
 </script>
