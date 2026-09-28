@@ -164,7 +164,7 @@ function emptyHTML(t){return `<div class="empty"><b>${esc(t)}</b>Usa el botón +
 function renderAppointments(){const q=(document.getElementById('appointmentSearch').value||'').toLowerCase();let rows=appointments.filter(a=>(filter!=='today'||a.date===localDate(0))&&(filter!=='confirmed'||a.status==='confirmed')&&(filter!=='cancelled'||a.status==='cancelled')&&(a.name+' '+a.service).toLowerCase().includes(q)).sort(sortAppt);document.getElementById('appointmentList').innerHTML=rows.map(a=>appointmentHTML(a,true)).join('')||emptyHTML(tr[lang].noAppointments)}
 function setFilter(el,f){filter=f;document.querySelectorAll('.chip').forEach(c=>c.classList.toggle('on',c===el));renderAppointments()}
 function initials(n){return n.split(/\s+/).slice(0,2).map(x=>x[0]).join('').toUpperCase()}
-function renderCustomers(){const q=(document.getElementById('customerSearch').value||'').toLowerCase();const rows=customers.filter(c=>(c.name+' '+c.phone+' '+c.email).toLowerCase().includes(q));document.getElementById('customerList').innerHTML=rows.map(c=>`<div class="item"><div class="customer-avatar">${esc(initials(c.name))}</div><div class="grow"><div class="item-title">${esc(c.name)}</div><div class="customer-meta">${esc(c.phone||c.email||'')} · ${c.visits||0} ${tr[lang].visits}</div></div><button class="ghost" data-edit-client="${esc(c.id)}">Editar</button></div>`).join('')||emptyHTML(tr[lang].noCustomers)}
+function renderCustomers(){const q=(document.getElementById('customerSearch').value||'').toLowerCase();const rows=customers.filter(c=>(c.name+' '+c.phone+' '+c.email).toLowerCase().includes(q));document.getElementById('customerList').innerHTML=rows.map(c=>`<div class="item"><div class="customer-avatar">${esc(initials(c.name))}</div><div class="grow"><div class="item-title">${esc(c.name)}</div><div class="customer-meta">${esc(c.phone||c.email||'')} · ${c.visits||0} ${tr[lang].visits}</div></div><button class="ghost" data-history-client="${esc(c.id)}">Historial</button><button class="ghost" data-edit-client="${esc(c.id)}">Editar</button></div>`).join('')||emptyHTML(tr[lang].noCustomers)}
 function openAppointment(){const f=document.getElementById('appointmentForm');f.reset();f.date.value=localDate(0);f.time.value='09:00';openModal('appointmentModal')}
 let editingClientId = null;
 function openCustomer(){
@@ -1101,5 +1101,60 @@ status.focus({ preventScroll: true });
   loadAppointments();
 })();
 </script>
+
+<dialog id="clientHistoryDialog" style="width:min(90vw,440px);max-height:85vh;overflow:auto;border:0;border-radius:20px;padding:24px">
+  <button type="button" id="clientHistoryClose" style="float:right" aria-label="Cerrar historial">✕</button>
+  <h2 id="clientHistoryTitle">Historial de citas</h2>
+  <p id="clientHistoryStatus" role="status"></p>
+  <ul id="clientHistoryList" style="list-style:none;padding:0"></ul>
+</dialog>
+<script>
+(() => {
+ const dialog = document.getElementById('clientHistoryDialog');
+ const title = document.getElementById('clientHistoryTitle');
+ const status = document.getElementById('clientHistoryStatus');
+ const list = document.getElementById('clientHistoryList');
+ let version = 0;
+ document.getElementById('clientHistoryClose').onclick = () => dialog.close();
+ dialog.addEventListener('close', () => { ++version; list.replaceChildren(); });
+ document.getElementById('customerList').addEventListener('click', async event => {
+   const button = event.target.closest('[data-history-client]');
+   if (!button) return;
+   const current = ++version;
+   const session = localStorage.getItem('bellezaAIToken') || '';
+   list.replaceChildren();
+   title.textContent = 'Historial de citas';
+   status.textContent = 'Cargando historial…';
+   dialog.showModal();
+   try {
+     if (!session) throw new Error('Inicia sesión para ver el historial.');
+     const response = await fetch('/api/clients/' + encodeURIComponent(button.dataset.historyClient) + '/history', {
+       headers: {Authorization: 'Bearer ' + session}
+     });
+     const data = await response.json();
+     if (current !== version || session !== (localStorage.getItem('bellezaAIToken') || '')) return;
+     if (!response.ok) throw new Error(data.error || 'No se pudo cargar el historial.');
+     if (!Array.isArray(data.appointments)) throw new Error('Respuesta inesperada.');
+     title.textContent = 'Citas de ' + data.client.name;
+     const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+     status.textContent = data.appointments.length ? 'Fechas y horas en ' + zone + '. Las citas confirmadas no acreditan asistencia ni pago.' : 'Este cliente todavía no tiene citas.';
+     for (const appointment of data.appointments) {
+       const item = document.createElement('li');
+       item.style.cssText = 'padding:14px 0;border-bottom:1px solid #eee6ed';
+       const name = document.createElement('strong');
+       name.textContent = appointment.service || 'Servicio no disponible';
+       const details = document.createElement('div');
+       const states = {confirmed:'Confirmada',cancelled:'Cancelada',completed:'Completada',pending:'Pendiente'};
+       details.textContent = new Date(appointment.starts_at).toLocaleString('es', {dateStyle:'medium',timeStyle:'short'}) + ' · ' + (states[appointment.status] || appointment.status);
+       item.append(name, details);
+       list.append(item);
+     }
+   } catch (error) {
+     if (current === version) status.textContent = error.message;
+   }
+ });
+})();
+</script>
+
 </body>
 </html>
