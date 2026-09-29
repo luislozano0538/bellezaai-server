@@ -1474,6 +1474,35 @@ status.focus({ preventScroll: true });
     }
     openModal('reportsModal');renderReport();
   };
+
+  const periods = document.createElement('div');
+  periods.className = 'chips';
+  periods.style.margin = '12px 0';
+  const periodLabels = {today:['Hoy','Today'],week:['Esta semana','This week'],month:['Este mes','This month']};
+  const formatDate = date => date.getFullYear()+'-'+String(date.getMonth()+1).padStart(2,'0')+'-'+String(date.getDate()).padStart(2,'0');
+  Object.entries(periodLabels).forEach(([key, labels]) => {
+    const shortcut = document.createElement('button');
+    shortcut.type = 'button';
+    shortcut.className = 'chip';
+    shortcut.textContent = labels[lang==='es'?0:1];
+    shortcut.onclick = () => {
+      const start = new Date(), end = new Date();
+      start.setHours(12,0,0,0);end.setHours(12,0,0,0);
+      if(key==='week') {
+        start.setDate(start.getDate() - ((start.getDay()+6)%7));
+        end.setTime(start.getTime());end.setDate(end.getDate()+6);
+      } else if(key==='month') {
+        start.setDate(1);end.setMonth(end.getMonth()+1,0);
+      }
+      get('reportFrom').value=formatDate(start);
+      get('reportTo').value=formatDate(end);
+      renderReport();
+    };
+    document.getElementById('language').addEventListener('change',()=>{shortcut.textContent=labels[lang==='es'?0:1];});
+    periods.append(shortcut);
+  });
+  get('reportForm').before(periods);
+
   get('reportForm').onsubmit=event=>{event.preventDefault();renderReport();};
   document.getElementById('language').addEventListener('change',()=>{button.textContent=lang==='es'?'Ver resumen':'View summary';});
 })();
