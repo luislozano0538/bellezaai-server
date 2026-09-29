@@ -360,7 +360,7 @@ app.post("/api/salon/check-hours", auth, async (req, res) => {
   }
   try {
     const q = await pool.query("SELECT business_hours FROM salons WHERE id=$1", [req.user.salonId]);
-    const services = await pool.query("SELECT duration_minutes, price_label FROM services WHERE id=$1 AND salon_id=$2 AND active=true",
+    const services = await pool.query("SELECT duration_minutes, price_label FROM services WHERE id=$1 AND salon_id=$2",
       [req.body.serviceId,req.user.salonId]);
     if (!services.rows.length) return res.status(404).json({error:"Servicio no encontrado."});
     const hours = q.rows[0]?.business_hours || null;
@@ -565,11 +565,11 @@ app.patch("/api/clients/:id", auth, async (req, res) => {
 app.get("/api/services", auth, async (req, res) => {
   try {
     const q = await pool.query(
-      `SELECT id, name, duration_minutes, price_label
+      `SELECT id, name, duration_minutes, price_label, active
        FROM services
-       WHERE salon_id=$1 AND active=true
+       WHERE salon_id=$1 AND (active=true OR $2::boolean)
        ORDER BY name`,
-      [req.user.salonId]
+      [req.user.salonId, req.query.includeArchived === 'true']
     );
 
     res.json(q.rows);
@@ -699,6 +699,24 @@ app.patch("/api/services/:id", auth, async (req, res) => {
       error: "No se pudo guardar el servicio."
     });
   }
+});
+
+
+app.patch("/api/services/:id/availability", auth, async (req, res) => {
+  if (req.user.role !== "owner") return res.status(403).json({error:"Solo el propietario puede archivar o recuperar servicios."});
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.params.id) || typeof req.body?.active !== "boolean") return res.status(400).json({error:"Servicio o estado inválido."});
+  let db;
+  try {
+    db=await pool.connect();
+    await db.query("BEGIN");
+    await db.query("SELECT pg_advisory_xact_lock(hashtext($1))",[req.user.salonId]);
+    const result=await db.query("UPDATE services SET active=$3 WHERE id=$1 AND salon_id=$2 RETURNING id,name,duration_minutes,price_label,active",[req.params.id,req.user.salonId,req.body.active]);
+    if (!result.rows[0]) {await db.query("ROLLBACK");return res.status(404).json({error:"Servicio no encontrado."});}
+    await db.query("COMMIT");res.json(result.rows[0]);
+  } catch(error) {
+    if(db) await db.query("ROLLBACK").catch(()=>{});
+    console.error(error);res.status(500).json({error:"No se pudo cambiar la disponibilidad del servicio."});
+  } finally {if(db)db.release();}
 });
 
 app.post("/api/appointments", auth, async (req, res) => {
@@ -889,8 +907,8 @@ app.patch("/api/appointments/:id", auth, async (req, res) => {
         "SELECT id FROM clients WHERE id=$1 AND salon_id=$2", [clientId, req.user.salonId]
       );
       const service = await db.query(
-        "SELECT duration_minutes, price_label FROM services WHERE id=$1 AND salon_id=$2 AND active=true",
-        [serviceId, req.user.salonId]
+        "SELECT duration_minutes, price_label FROM services WHERE id=$1 AND salon_id=$2 AND (active=true OR id=$3)",
+        [serviceId, req.user.salonId, appointment.service_id]
       );
       if (!client.rows[0] || !service.rows[0]) {
         return res.status(404).json({ error: "Cliente o servicio no encontrado en tu salón." });
