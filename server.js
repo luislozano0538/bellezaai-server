@@ -490,6 +490,7 @@ app.post("/api/clients", auth, async (req, res) => {
   try {
     const { name, phone = "", email = "", notes = "" } = req.body || {};
 
+    if (typeof notes !== "string" || notes.length > 2000) return res.status(400).json({error:"Las notas deben tener hasta 2000 caracteres."});
     if (!name) {
       return res.status(400).json({ error: "Falta el nombre del cliente." });
     }
@@ -537,7 +538,8 @@ app.get("/api/clients/:id/history", auth, async (req, res) => {
 });
 
 app.patch("/api/clients/:id", auth, async (req, res) => {
-  const {name, phone = "", email = ""} = req.body || {};
+  const {name, phone = "", email = "", notes} = req.body || {};
+  if (notes !== undefined && (typeof notes !== "string" || notes.length > 2000)) return res.status(400).json({error:"Las notas deben tener hasta 2000 caracteres."});
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.params.id) ||
       typeof name !== "string" || !name.trim() || name.trim().length > 120 ||
       typeof phone !== "string" || phone.length > 80 ||
@@ -547,10 +549,10 @@ app.patch("/api/clients/:id", auth, async (req, res) => {
   }
   try {
     const q = await pool.query(
-      `UPDATE clients SET name=$3, phone=$4, email=$5
+      `UPDATE clients SET name=$3, phone=$4, email=$5, notes=COALESCE($6,notes)
        WHERE id=$1 AND salon_id=$2
        RETURNING id, name, phone, email, notes, created_at`,
-      [req.params.id, req.user.salonId, name.trim(), phone.trim(), email.trim()]
+      [req.params.id, req.user.salonId, name.trim(), phone.trim(), email.trim(), notes === undefined ? null : notes.trim()]
     );
     if (!q.rows.length) return res.status(404).json({error: "Cliente no encontrado."});
     res.json(q.rows[0]);
