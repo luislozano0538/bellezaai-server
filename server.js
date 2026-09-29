@@ -369,6 +369,16 @@ app.post("/api/salon/check-hours", auth, async (req, res) => {
   } catch { res.status(500).json({error:"No se pudo comprobar el horario."}); }
 });
 
+app.get("/api/profile", auth, async (req, res) => {
+  try {
+    const q = await pool.query("SELECT name FROM users WHERE id=$1 AND salon_id=$2", [req.user.id, req.user.salonId]);
+    if (!q.rows.length) return res.status(404).json({error:"Cuenta no encontrada."});
+    res.json({name:q.rows[0].name});
+  } catch {
+    res.status(500).json({error:"No se pudo cargar el perfil."});
+  }
+});
+
 app.get("/api/salon", auth, async (req, res) => {
   try {
     const q = await pool.query("SELECT name FROM salons WHERE id=$1", [req.user.salonId]);
