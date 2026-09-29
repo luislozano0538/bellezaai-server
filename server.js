@@ -460,10 +460,12 @@ app.get("/api/appointments", auth, async (req, res) => {
 app.get("/api/clients", auth, async (req, res) => {
   try {
     const q = await pool.query(
-      `SELECT id, name, phone, email, notes, created_at
-       FROM clients
-       WHERE salon_id=$1
-       ORDER BY name`,
+       `SELECT c.id, c.name, c.phone, c.email, c.notes, c.created_at,
+         (SELECT COUNT(*)::int FROM appointments a
+          WHERE a.client_id=c.id AND a.salon_id=c.salon_id AND a.status<>'cancelled') AS appointment_count
+       FROM clients c
+       WHERE c.salon_id=$1
+       ORDER BY c.name`,
       [req.user.salonId]
     );
 
