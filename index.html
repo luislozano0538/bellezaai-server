@@ -166,7 +166,7 @@ function renderHome(){const todays=appointments.filter(a=>a.status!=='cancelled'
 function sortAppt(a,b){return (a.date+a.time).localeCompare(b.date+b.time)}
 function appointmentHTML(a,showDate=true){return `<div class="item"><div class="timebox">${showDate?esc(prettyDate(a.date))+'<br>':''}${esc(prettyTime(a.time))}</div><div class="grow"><div class="item-title">${esc(a.name)}</div><div class="item-sub">${esc(a.service)} · <span class="badge">${tr[lang].confirmed}</span></div></div><div class="price">$${Number(a.price||0)}</div></div>`}
 function emptyHTML(t){return `<div class="empty"><b>${esc(t)}</b>Usa el botón + para comenzar.</div>`}
-function renderAppointments(){const q=(document.getElementById('appointmentSearch').value||'').toLowerCase();const selectedDate=document.getElementById('appointmentDateFilter').value;let rows=appointments.filter(a=>(!selectedDate||a.date===selectedDate)&&(filter!=='today'||a.date===localDate(0))&&(filter!=='confirmed'||a.status==='confirmed')&&(filter!=='cancelled'||a.status==='cancelled')&&(a.name+' '+a.service).toLowerCase().includes(q)).sort(sortAppt);document.getElementById('appointmentList').innerHTML=rows.map(a=>appointmentHTML(a,true)).join('')||emptyHTML(tr[lang].noAppointments)}
+function renderAppointments(){const q=(document.getElementById('appointmentSearch').value||'').toLowerCase();const selectedDate=document.getElementById('appointmentDateFilter').value;let rows=appointments.filter(a=>(!selectedDate||a.date===selectedDate)&&(!document.getElementById('agendaProfessional')?.value||(document.getElementById('agendaProfessional').value==='unassigned'?!a.professional_id:a.professional_id===document.getElementById('agendaProfessional').value))&&(filter!=='today'||a.date===localDate(0))&&(filter!=='confirmed'||a.status==='confirmed')&&(filter!=='cancelled'||a.status==='cancelled')&&(a.name+' '+a.service).toLowerCase().includes(q)).sort(sortAppt);document.getElementById('appointmentList').innerHTML=rows.map(a=>appointmentHTML(a,true)).join('')||emptyHTML(tr[lang].noAppointments)}
 function setAgendaDate(){if(filter==='today'){filter='all';document.querySelectorAll('.chip').forEach(c=>c.classList.toggle('on',c.dataset.filter==='all'));}renderAppointments()}
 function setFilter(el,f){if(f==='today'||f==='all')document.getElementById('appointmentDateFilter').value='';filter=f;document.querySelectorAll('.chip').forEach(c=>c.classList.toggle('on',c===el));renderAppointments()}
 function initials(n){return n.split(/\s+/).slice(0,2).map(x=>x[0]).join('').toUpperCase()}
@@ -808,6 +808,12 @@ translate();renderHome();renderAppointments();renderCustomers();
   clientSelect.required = true;
   oldName.replaceWith(clientSelect);
   serviceSelect.required = true;
+  const professionalLabel = document.createElement('label');
+  professionalLabel.textContent = 'Profesional';
+  const professionalSelect = document.createElement('select');
+  professionalSelect.name = 'professionalId';
+  professionalLabel.append(professionalSelect);
+  serviceSelect.closest('label').after(professionalLabel);
 
   price.type = 'text';
   price.readOnly = true;
@@ -906,6 +912,10 @@ translate();renderHome();renderAppointments();renderCustomers();
     container.innerHTML =
       originalAppointmentHTML(appointment, showDate);
 
+    const assigned = document.createElement('div');
+    assigned.className = 'small';
+    assigned.textContent = (lang==='es'?'Profesional: ':'Professional: ') + (appointment.professional_name || (lang==='es'?'Sin asignar':'Unassigned'));
+    (container.querySelector('.grow') || container.firstElementChild).append(assigned);
     const amount = container.querySelector('.price');
     if (amount && appointment.priceLabel !== undefined) {
       amount.textContent = appointment.priceLabel || 'Sin precio';
@@ -1010,6 +1020,7 @@ translate();renderHome();renderAppointments();renderCustomers();
     form.elements.namedItem('time').value = '09:00';
     options(clientSelect, [], 'Cargando clientes…');
     options(serviceSelect, [], 'Cargando servicios…');
+    options(professionalSelect, [], 'Cargando profesionales…');
     clients = [];
     services = [];
     save.disabled = true;
@@ -1019,7 +1030,8 @@ translate();renderHome();renderAppointments();renderCustomers();
     try {
       const data = await Promise.all([
         api('clients'),
-        api('services')
+        api('services'),
+        api('professionals')
       ]);
       if (current !== formVersion) return;
       if (!data.every(Array.isArray)) {
@@ -1027,6 +1039,8 @@ translate();renderHome();renderAppointments();renderCustomers();
       }
 
       [clients, services] = data;
+      options(professionalSelect, data[2].filter(p=>p.active || p.id === selected?.professional_id), 'Sin asignar (reserva el salón)');
+      professionalSelect.value = selected?.professional_id || '';
       options(clientSelect, clients, 'Selecciona un cliente');
       options(serviceSelect, services, 'Selecciona un servicio');
       if (clientId && clients.some(client => client.id === clientId)) clientSelect.value = clientId;
@@ -1085,7 +1099,8 @@ translate();renderHome();renderAppointments();renderCustomers();
       const result = await api(editingId ? 'appointments/' + encodeURIComponent(editingId) : 'appointments', editingId ? 'PATCH' : 'POST', {
         clientId: client.id,
         serviceId: service.id,
-        startsAt: start.toISOString()
+        startsAt: start.toISOString(),
+        professionalId: professionalSelect.value || null
       });
 
       if (!result.id) {
@@ -1505,6 +1520,85 @@ status.focus({ preventScroll: true });
 
   get('reportForm').onsubmit=event=>{event.preventDefault();renderReport();};
   document.getElementById('language').addEventListener('change',()=>{button.textContent=lang==='es'?'Ver resumen':'View summary';});
+})();
+</script>
+
+
+<script>
+(() => {
+  const trigger = document.createElement('button');
+  trigger.type='button';trigger.className='primary';trigger.textContent='Gestionar equipo';
+  document.querySelector('#settings .pagebar').after(trigger);
+  const modal=document.createElement('div');modal.id='teamModal';modal.className='modal';
+  modal.innerHTML='<div class="sheet"><div class="sheetbar"><h2>Equipo del salón</h2><button class="close" type="button" aria-label="Cerrar equipo">×</button></div><p>El propietario puede crear y editar profesionales. Asígnalos al crear o reprogramar una cita.</p><p id="teamStatus" role="status"></p><div id="teamList"></div><h3 id="teamFormTitle">Nuevo profesional</h3><form id="teamForm" class="form"><label>Nombre<input name="name" required maxlength="120"></label><label>Teléfono<input name="phone" type="tel" maxlength="60"></label><label>Correo<input name="email" type="email" maxlength="254"></label><button class="primary" type="submit">Guardar profesional</button><button class="ghost" type="button" id="teamReset">Nuevo / Cancelar edición</button></form></div>';
+  document.querySelector('.app').append(modal);
+  const form=document.getElementById('teamForm'), status=document.getElementById('teamStatus'), list=document.getElementById('teamList');
+  let editing=null, busy=false, version=0;
+  const filterLabel=document.createElement('label');filterLabel.textContent='Filtrar por profesional';
+  const filter=document.createElement('select');filter.id='agendaProfessional';filter.className='select';filter.style.cssText='display:block;margin:8px 0 14px;width:100%';
+  filter.append(new Option('Todos los profesionales',''),new Option('Sin asignar','unassigned'));filterLabel.append(filter);
+  document.getElementById('appointmentList').before(filterLabel);
+  filter.onchange=()=>renderAppointments();
+  async function api(path,method='GET',body) {
+    const token=localStorage.getItem('bellezaAIToken');
+    if(!token) throw Error('Inicia sesión para gestionar el equipo.');
+    const response=await fetch('/api/'+path,{method,headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},...(body?{body:JSON.stringify(body)}:{})});
+    const data=await response.json();
+    if(token!==localStorage.getItem('bellezaAIToken')) throw Error('La sesión cambió.');
+    if(!response.ok) throw Error(data.error||'No se pudo completar la operación.');
+    return data;
+  }
+  function reset() {editing=null;form.reset();document.getElementById('teamFormTitle').textContent='Nuevo profesional';}
+  function updateFilter(rows) {
+    const value=filter.value;
+    filter.replaceChildren(new Option('Todos los profesionales',''),new Option('Sin asignar','unassigned'));
+    rows.forEach(row=>filter.add(new Option(row.name+(row.active?'':' (inactivo)'),row.id)));
+    if([...filter.options].some(option=>option.value===value)) filter.value=value;
+    renderAppointments();
+  }
+  async function load() {
+    const current=++version;
+    status.textContent='Cargando equipo…';list.replaceChildren();
+    try {
+      const rows=await api('professionals');
+      if(current!==version)return;
+      updateFilter(rows);
+      rows.forEach(row=>{
+        const card=document.createElement('div');card.className='item';
+        const detail=document.createElement('div');detail.className='grow';
+        const name=document.createElement('b');name.textContent=row.name+(row.active?'':' (inactivo)');
+        const contact=document.createElement('div');contact.className='small';contact.textContent=[row.phone,row.email].filter(Boolean).join(' · ');
+        detail.append(name,contact);
+        const edit=document.createElement('button');edit.type='button';edit.className='ghost';edit.textContent='Editar';
+        edit.onclick=()=>{if(busy)return;editing=row.id;['name','phone','email'].forEach(key=>form.elements.namedItem(key).value=row[key]||'');document.getElementById('teamFormTitle').textContent='Editar profesional';form.elements.namedItem('name').focus();};
+        card.append(detail,edit);list.append(card);
+      });
+      status.textContent=rows.length?'':'Todavía no hay profesionales. Añade el primero.';
+    } catch(error){if(current===version)status.textContent=error.message;}
+  }
+  trigger.onclick=()=>{if(busy)return;reset();openModal('teamModal');load();};
+  modal.querySelector('.close').onclick=()=>{if(!busy){version++;closeModal('teamModal');}};
+  modal.onclick=event=>{if(event.target===modal&&!busy){version++;closeModal('teamModal');}};
+  document.getElementById('teamReset').onclick=()=>{if(!busy)reset();};
+  form.onsubmit=async event=>{
+    event.preventDefault();if(busy)return;
+    const body=Object.fromEntries(new FormData(form));
+    body.name=body.name.trim();
+    if(!body.name){status.textContent='Escribe un nombre.';return;}
+    busy=true;const save=form.querySelector('[type="submit"]');save.disabled=true;status.textContent='Guardando…';
+    try {
+      await api(editing?'professionals/'+encodeURIComponent(editing):'professionals',editing?'PATCH':'POST',body);
+      reset();await load();
+    } catch(error){status.textContent=error.message+' Si hubo un problema de conexión, vuelve a abrir Equipo antes de repetir.';}
+    finally{busy=false;save.disabled=false;}
+  };
+  function refreshFilterFromAppointments() {
+    const rows=new Map();
+    appointments.forEach(a=>{if(a.professional_id)rows.set(a.professional_id,{id:a.professional_id,name:a.professional_name||'Profesional',active:true});});
+    updateFilter([...rows.values()]);
+  }
+  window.addEventListener('appointments-updated',refreshFilterFromAppointments);
+  refreshFilterFromAppointments();
 })();
 </script>
 
