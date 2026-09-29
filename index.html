@@ -1340,5 +1340,106 @@ status.focus({ preventScroll: true });
  loadProfile();
 })();
 </script>
+
+<script>
+(() => {
+  const entry = document.querySelector('[data-t="reportsSub"]');
+  entry.removeAttribute('data-t');
+  entry.textContent = '';
+  const button = document.createElement('button');
+  button.className = 'ghost';
+  button.type = 'button';
+  button.textContent = lang === 'es' ? 'Ver resumen' : 'View summary';
+  entry.append(button);
+  const modal = document.createElement('div');
+  modal.className = 'modal';
+  modal.id = 'reportsModal';
+  modal.innerHTML = '<div class="sheet"><div class="sheetbar"><h2 id="reportTitle"></h2><button class="close" type="button" aria-label="Cerrar / Close">×</button></div><form class="form" id="reportForm"><label><span id="reportFromLabel"></span><input id="reportFrom" type="date" required></label><label><span id="reportToLabel"></span><input id="reportTo" type="date" required></label><button class="primary" id="reportRefresh"></button></form><p id="reportNotice" role="status"></p><div id="reportResult" aria-live="polite"></div></div>';
+  document.querySelector('.app').append(modal);
+  const get = id => document.getElementById(id);
+  let request = 0;
+  modal.querySelector('.close').onclick = () => { request++; closeModal('reportsModal'); };
+  modal.onclick = event => { if(event.target === modal) { request++; closeModal('reportsModal'); } };
+  async function renderReport() {
+    const version = ++request;
+    const es = lang === 'es';
+    const from = get('reportFrom').value, to = get('reportTo').value;
+    get('reportResult').replaceChildren();
+    if (!from || !to || from > to) {
+      get('reportNotice').textContent = es ? 'Elige un rango de fechas válido.' : 'Choose a valid date range.';
+      return;
+    }
+    get('reportNotice').textContent = es ? 'Cargando resumen…' : 'Loading summary…';
+    try {
+      const session = localStorage.getItem('bellezaAIToken');
+      if (!session) throw new Error(es ? 'Inicia sesión para ver tus reportes.' : 'Sign in to view reports.');
+      const response = await fetch('/api/appointments', {headers:{Authorization:'Bearer '+session}});
+      if (!response.ok) throw new Error(es ? 'No se pudo cargar el reporte. Vuelve a intentarlo.' : 'Could not load the report. Try again.');
+      const all = await response.json();
+      if(version !== request || session !== localStorage.getItem('bellezaAIToken')) return;
+      const rows = all.filter(row => {
+        const d = new Date(row.starts_at);
+        if (Number.isNaN(d.getTime())) return false;
+        const key = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+        return key >= from && key <= to;
+      });
+      const active = rows.filter(row=>row.status !== 'cancelled');
+      const metrics = [
+        [es?'Citas registradas':'Recorded appointments',rows.length],
+        [es?'Citas no canceladas':'Non-cancelled appointments',active.length],
+        [es?'Canceladas':'Cancelled',rows.length-active.length],
+        [es?'Clientes con citas no canceladas':'Clients with non-cancelled appointments',new Set(active.map(row=>row.client_id)).size]
+      ];
+      const grid = document.createElement('div');
+      grid.className = 'grid';
+      metrics.forEach(([label,value])=>{
+        const card=document.createElement('div');card.className='card metric';
+        const number=document.createElement('div');number.className='num';number.textContent=value;
+        const caption=document.createElement('div');caption.className='label';caption.textContent=label;
+        card.append(number,caption);grid.append(card);
+      });
+      get('reportResult').append(grid);
+      const title=document.createElement('h3');
+      title.textContent=es?'Servicios más reservados (sin cancelaciones)':'Most booked services (excluding cancellations)';
+      get('reportResult').append(title);
+      const groups=new Map();
+      active.forEach(row=>{
+        const key=row.service_id||row.service;
+        const group=groups.get(key)||{name:row.service,count:0};
+        group.count++;groups.set(key,group);
+      });
+      if (!groups.size) {
+        const empty=document.createElement('p');
+        empty.textContent=es?'No hay reservas sin cancelar en estas fechas.':'No non-cancelled bookings in this period.';
+        get('reportResult').append(empty);
+      } else {
+        const list=document.createElement('ol');
+        [...groups.values()].sort((a,b)=>b.count-a.count||String(a.name).localeCompare(String(b.name))).forEach(group=>{
+          const item=document.createElement('li');item.textContent=group.name+' · '+group.count;list.append(item);
+        });
+        get('reportResult').append(list);
+      }
+      get('reportNotice').textContent=(es?'Fechas según tu dispositivo: ':'Dates use your device timezone: ')+Intl.DateTimeFormat().resolvedOptions().timeZone+'. '+(es?'Las reservas no confirman asistencia ni pagos cobrados.':'Bookings do not confirm attendance or collected payments.');
+    } catch(error) {
+      if(version === request) get('reportNotice').textContent=error.message;
+    }
+  }
+  button.onclick = () => {
+    const es=lang==='es';
+    get('reportTitle').textContent=es?'Resumen de citas':'Appointment summary';
+    get('reportFromLabel').textContent=es?'Desde':'From';
+    get('reportToLabel').textContent=es?'Hasta':'To';
+    get('reportRefresh').textContent=es?'Actualizar resumen':'Update summary';
+    if(!get('reportFrom').value) {
+      get('reportFrom').value=localDate(0).slice(0,7)+'-01';
+      get('reportTo').value=localDate(0);
+    }
+    openModal('reportsModal');renderReport();
+  };
+  get('reportForm').onsubmit=event=>{event.preventDefault();renderReport();};
+  document.getElementById('language').addEventListener('change',()=>{button.textContent=lang==='es'?'Ver resumen':'View summary';});
+})();
+</script>
+
 </body>
 </html>
