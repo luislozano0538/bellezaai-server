@@ -735,6 +735,7 @@ app.post("/api/appointments", auth, async (req, res) => {
       return res.status(404).json({ error: "Cliente no encontrado." });
     }
 
+    if (professionalId !== null && (typeof professionalId !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(professionalId))) return res.status(400).json({error:"Profesional inválido."});
     // Validar profesional si se proporciona
     if (professionalId) {
       const professional = await db.query(
@@ -874,6 +875,12 @@ app.patch("/api/appointments/:id", auth, async (req, res) => {
         return res.status(409).json({ error: "Solo puedes editar citas confirmadas." });
       }
       const { clientId, serviceId, startsAt } = body;
+      const professionalId = body.professionalId === undefined ? appointment.professional_id : body.professionalId;
+      if (professionalId !== null && professionalId !== undefined) {
+        if (typeof professionalId !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(professionalId)) return res.status(400).json({error:"Profesional inválido."});
+        const professional = await db.query("SELECT id FROM professionals WHERE id=$1 AND salon_id=$2 AND active=true", [professionalId, req.user.salonId]);
+        if (!professional.rows[0]) return res.status(404).json({error:"Profesional no disponible en tu salón."});
+      }
       const start = new Date(startsAt);
       if (!clientId || !serviceId || !startsAt || Number.isNaN(start.getTime()) || start <= new Date()) {
         return res.status(400).json({ error: "Selecciona cliente, servicio y una fecha futura." });
@@ -895,14 +902,14 @@ app.patch("/api/appointments/:id", auth, async (req, res) => {
            AND starts_at<$4 AND ends_at>$3
            AND ($5::uuid IS NULL OR professional_id=$5 OR professional_id IS NULL)
          LIMIT 1`,
-        [req.user.salonId, id, start, end, appointment.professional_id]
+        [req.user.salonId, id, start, end, professionalId || null]
       );
       if (conflict.rows[0]) return res.status(409).json({ error: "Ese horario ya tiene una cita." });
       result = await db.query(
-        `UPDATE appointments SET client_id=$3, service_id=$4, starts_at=$5, ends_at=$6,
+        `UPDATE appointments SET client_id=$3, service_id=$4, starts_at=$5, ends_at=$6, professional_id=$8,
          price_label_snapshot=CASE WHEN service_id=$4 THEN price_label_snapshot ELSE $7 END
          WHERE id=$1 AND salon_id=$2 RETURNING *`,
-        [id, req.user.salonId, clientId, serviceId, start, end, service.rows[0].price_label || ""]
+        [id, req.user.salonId, clientId, serviceId, start, end, service.rows[0].price_label || "", professionalId || null]
       );
       // Keep sent history, cancel all unsent notices, and prepare one replacement.
       await db.query(
@@ -995,6 +1002,7 @@ app.get("/api/professionals", auth, async (req, res) => {
 
 // POST /api/professionals - Crear nuevo profesional
 app.post("/api/professionals", auth, async (req, res) => {
+  if (req.user.role !== "owner") return res.status(403).json({error:"Solo el propietario puede gestionar el equipo."});
   try {
     const {
       name,
@@ -1008,8 +1016,8 @@ app.post("/api/professionals", auth, async (req, res) => {
       specialties = []
     } = req.body || {};
 
-    if (!name) {
-      return res.status(400).json({ error: "Falta el nombre del profesional." });
+    if (typeof name !== "string" || !name.trim() || name.length > 120 || typeof phone !== "string" || phone.length > 60 || typeof email !== "string" || email.length > 254 || !Array.isArray(specialties) || specialties.some(s => typeof s !== "string" || s.length > 120)) {
+      return res.status(400).json({ error: "Revisa el nombre y los datos del profesional." });
     }
 
     const id = crypto.randomUUID();
@@ -1057,6 +1065,21 @@ app.post("/api/professionals", auth, async (req, res) => {
     console.error(error);
     res.status(500).json({ error: "No se pudo guardar el profesional." });
   }
+});
+
+
+app.patch("/api/professionals/:id", auth, async (req, res) => {
+  if (req.user.role !== "owner") return res.status(403).json({error:"Solo el propietario puede gestionar el equipo."});
+  const {name, phone = "", email = ""} = req.body || {};
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.params.id) || typeof name !== "string" || !name.trim() || name.length > 120 || typeof phone !== "string" || phone.length > 60 || typeof email !== "string" || email.length > 254) return res.status(400).json({error:"Revisa el nombre y los datos del profesional."});
+  try {
+    const result = await pool.query(
+      "UPDATE professionals SET name=$3, phone=$4, email=$5 WHERE id=$1 AND salon_id=$2 RETURNING id,name,phone,email,active",
+      [req.params.id, req.user.salonId, name.trim(), phone.trim(), email.trim()]
+    );
+    if (!result.rows[0]) return res.status(404).json({error:"Profesional no encontrado."});
+    res.json(result.rows[0]);
+  } catch(error) { console.error(error); res.status(500).json({error:"No se pudo actualizar el profesional."}); }
 });
 
 app.post("/api/chat", auth, async (req, res) => {
