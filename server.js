@@ -738,8 +738,8 @@ app.post("/api/appointments", auth, async (req, res) => {
 
     const start = new Date(startsAt);
 
-    if (Number.isNaN(start.getTime())) {
-      return res.status(400).json({ error: "Fecha de cita inválida." });
+    if (Number.isNaN(start.getTime()) || start <= new Date()) {
+      return res.status(400).json({ error: "Selecciona una fecha y hora futuras." });
     }
 
     const end = new Date(
@@ -870,7 +870,7 @@ app.patch("/api/appointments/:id", auth, async (req, res) => {
         "SELECT id FROM clients WHERE id=$1 AND salon_id=$2", [clientId, req.user.salonId]
       );
       const service = await db.query(
-        "SELECT duration_minutes FROM services WHERE id=$1 AND salon_id=$2 AND active=true",
+        "SELECT duration_minutes, price_label FROM services WHERE id=$1 AND salon_id=$2 AND active=true",
         [serviceId, req.user.salonId]
       );
       if (!client.rows[0] || !service.rows[0]) {

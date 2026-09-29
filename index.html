@@ -1067,6 +1067,10 @@ translate();renderHome();renderAppointments();renderCustomers();
       return;
     }
 
+    if (start <= new Date()) {
+      status.textContent = 'Esta fecha u hora ya pasó. Elige una hora futura.';
+      return;
+    }
     saving = true;
     save.disabled = true;
     status.textContent = 'Guardando cita…';
