@@ -649,6 +649,12 @@ translate();renderHome();renderAppointments();renderCustomers();
   let version = 0;
   let editingId = null;
   const cancelEdit = document.getElementById('serviceEditCancel');
+  const archivedLabel=document.createElement('label');
+  archivedLabel.style.cssText='display:block;margin:12px 0';
+  const archivedToggle=document.createElement('input');archivedToggle.type='checkbox';
+  archivedLabel.append(archivedToggle,document.createTextNode(' Mostrar servicios archivados'));
+  list.before(archivedLabel);
+  archivedToggle.onchange=()=>{if(busy)return;resetEditor();loadServices();};
   function resetEditor() {
     editingId = null;
     form.reset();
@@ -665,13 +671,13 @@ translate();renderHome();renderAppointments();renderCustomers();
     'background:#743b7d;color:white;font-weight:bold';
   document.querySelector('.app').prepend(button);
 
-  async function request(method, fields, id) {
+  async function request(method, fields, id, availability = false) {
     const token = session();
     if (!token) {
       throw new Error('Inicia sesión para usar tus servicios.');
     }
 
-    const response = await fetch('/api/services' + (id ? '/' + encodeURIComponent(id) : ''), {
+    const response = await fetch('/api/services' + (id ? '/' + encodeURIComponent(id) + (availability ? '/availability' : '') : (method === 'GET' && archivedToggle.checked ? '?includeArchived=true' : '')), {
       method,
       headers: {
         'Content-Type': 'application/json',
@@ -716,7 +722,22 @@ translate();renderHome();renderAppointments();renderCustomers();
       status.textContent = 'Los cambios no modifican el horario ni el importe de citas existentes.';
       form.elements.namedItem('name').focus();
     };
-    item.append(edit);
+    if(service.active !== false) item.append(edit);
+    else item.append(document.createTextNode(' · Archivado'));
+    const availability=document.createElement('button');
+    availability.type='button';availability.style.marginLeft='10px';
+    availability.textContent=service.active===false?'Recuperar':'Archivar';
+    availability.onclick=async()=>{
+      if(busy)return;
+      const restoring=service.active===false;
+      if(!restoring && !confirm('¿Archivar '+service.name+'? Dejará de ofrecerse en nuevas citas. Las citas existentes se conservan.'))return;
+      busy=true;save.disabled=true;archivedToggle.disabled=true;++version;
+      status.textContent=restoring?'Recuperando servicio…':'Archivando servicio…';
+      try {await request('PATCH',{active:restoring},service.id,true);resetEditor();await loadServices();}
+      catch(error){status.textContent=error.message;}
+      finally{busy=false;save.disabled=false;archivedToggle.disabled=false;}
+    };
+    item.append(availability);
     list.append(item);
   }
 
@@ -1030,7 +1051,7 @@ translate();renderHome();renderAppointments();renderCustomers();
     try {
       const data = await Promise.all([
         api('clients'),
-        api('services'),
+        api(selected ? 'services?includeArchived=true' : 'services'),
         api('professionals')
       ]);
       if (current !== formVersion) return;
@@ -1038,7 +1059,8 @@ translate();renderHome();renderAppointments();renderCustomers();
         throw new Error('No se pudieron leer clientes y servicios.');
       }
 
-      [clients, services] = data;
+      clients = data[0];
+      services = data[1].filter(service=>service.active !== false || service.id === selected?.service_id);
       options(professionalSelect, data[2].filter(p=>p.active || p.id === selected?.professional_id), 'Sin asignar (reserva el salón)');
       professionalSelect.value = selected?.professional_id || '';
       options(clientSelect, clients, 'Selecciona un cliente');
