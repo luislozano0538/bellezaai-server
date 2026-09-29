@@ -39,11 +39,11 @@
 <body>
 <div class="app">
   <header class="top">
-    <div class="between"><div><div class="brand">BellezaAI ✨</div><div class="tag" data-t="salonPanel">Panel inteligente de tu salón</div></div><div class="avatar">LM</div></div>
+    <div class="between"><div><div class="brand">BellezaAI ✨</div><div class="tag" data-t="salonPanel">Panel inteligente de tu salón</div></div><div class="avatar" aria-label="Cuenta">👤</div></div>
   </header>
   <main>
     <section class="view active" id="home">
-      <div class="hello" data-t="hello">Hola, Luis 👋</div><div class="date" id="today"></div>
+      <div class="hello" data-t="hello">Hola 👋</div><div class="date" id="today"></div>
       <div class="grid">
         <div class="card metric"><div class="icon">📅</div><div class="num" id="todayCount">3</div><div class="label" data-t="todayAppointments">Citas hoy</div></div>
         <div class="card metric"><div class="icon">👥</div><div class="num" id="clientCount">3</div><div class="label" data-t="clients">Clientes</div></div>
@@ -102,8 +102,8 @@ let appointments=[];
 let customers=[];
 let filter='all',lang=localStorage.getItem('bellezaAILang')||'es';
 const tr={
-es:{agendaDate:'Fecha de la agenda',clearDate:'Quitar fecha',pendingConnection:'Pendiente de conectar',salonPanel:'Panel inteligente de tu salón',hello:'Hola, Luis 👋',todayAppointments:'Citas hoy',clients:'Clientes',todayIncome:'Valor de citas hoy',yourAI:'Tu asistente IA',aiIntro:'Consulta tus citas, precios y duración de los servicios.',talkAI:'Hablar con mi IA',nextAppointments:'Próximas citas',seeAll:'Ver todas',appointments:'Citas',customers:'Clientes',settings:'Ajustes',home:'Inicio',all:'Todas',today:'Hoy',confirmed:'Confirmadas',salon:'Salón',salonName:'Nombre del salón',hours:'Horario',assistant:'Asistente',autoReplies:'Respuestas automáticas',autoRepliesSub:'Contestar preguntas frecuentes',reminders:'Recordatorios',remindersSub:'24 horas antes de cada cita',reviewRequests:'Solicitar reseñas',reviewSub:'Después de cada servicio',preferences:'Preferencias',language:'Idioma',reports:'Reportes',reportsSub:'Próximamente',newAppointment:'Nueva cita',clientName:'Nombre del cliente',service:'Servicio',date:'Fecha',time:'Hora',price:'Precio',saveAppointment:'Guardar cita',newCustomer:'Nuevo cliente',name:'Nombre',phone:'Teléfono',saveCustomer:'Guardar cliente',online:'● En línea · Español/English',checkSchedule:'Revisar agenda',replyCustomer:'Responder cliente',todaySummary:'Resumen de hoy',searchAppointments:'Buscar cita o servicio',searchCustomers:'Buscar cliente',askAI:'Pregúntale a tu asistente…',noAppointments:'No hay citas',noCustomers:'No hay clientes',visits:'visitas',saved:'Guardado correctamente',botHello:'Hola, Luis. Soy tu asistente de BellezaAI. ¿En qué te ayudo con el salón?'},
-en:{agendaDate:'Agenda date',clearDate:'Clear date',pendingConnection:'Not connected yet',salonPanel:'Your salon smart dashboard',hello:'Hello, Luis 👋',todayAppointments:"Today's appointments",clients:'Clients',todayIncome:"Today's income",yourAI:'Your AI assistant',aiIntro:'Check your appointments, service prices and durations.',talkAI:'Talk to my AI',nextAppointments:'Upcoming appointments',seeAll:'See all',appointments:'Appointments',customers:'Clients',settings:'Settings',home:'Home',all:'All',today:'Today',confirmed:'Confirmed',salon:'Salon',salonName:'Salon name',hours:'Business hours',assistant:'Assistant',autoReplies:'Automatic replies',autoRepliesSub:'Answer frequently asked questions',reminders:'Reminders',remindersSub:'24 hours before every appointment',reviewRequests:'Request reviews',reviewSub:'After every service',preferences:'Preferences',language:'Language',reports:'Reports',reportsSub:'Coming soon',newAppointment:'New appointment',clientName:'Client name',service:'Service',date:'Date',time:'Time',price:'Price',saveAppointment:'Save appointment',newCustomer:'New client',name:'Name',phone:'Phone',saveCustomer:'Save client',online:'● Online · Español/English',checkSchedule:'Check schedule',replyCustomer:'Reply to client',todaySummary:"Today's summary",searchAppointments:'Search appointment or service',searchCustomers:'Search client',askAI:'Ask your assistant…',noAppointments:'No appointments',noCustomers:'No clients',visits:'visits',saved:'Saved successfully',botHello:'Hi, Luis. I am your BellezaAI assistant. How can I help with the salon?'}};
+es:{agendaDate:'Fecha de la agenda',clearDate:'Quitar fecha',pendingConnection:'Pendiente de conectar',salonPanel:'Panel inteligente de tu salón',hello:'Hola 👋',todayAppointments:'Citas hoy',clients:'Clientes',todayIncome:'Valor de citas hoy',yourAI:'Tu asistente IA',aiIntro:'Consulta tus citas, precios y duración de los servicios.',talkAI:'Hablar con mi IA',nextAppointments:'Próximas citas',seeAll:'Ver todas',appointments:'Citas',customers:'Clientes',settings:'Ajustes',home:'Inicio',all:'Todas',today:'Hoy',confirmed:'Confirmadas',salon:'Salón',salonName:'Nombre del salón',hours:'Horario',assistant:'Asistente',autoReplies:'Respuestas automáticas',autoRepliesSub:'Contestar preguntas frecuentes',reminders:'Recordatorios',remindersSub:'24 horas antes de cada cita',reviewRequests:'Solicitar reseñas',reviewSub:'Después de cada servicio',preferences:'Preferencias',language:'Idioma',reports:'Reportes',reportsSub:'Próximamente',newAppointment:'Nueva cita',clientName:'Nombre del cliente',service:'Servicio',date:'Fecha',time:'Hora',price:'Precio',saveAppointment:'Guardar cita',newCustomer:'Nuevo cliente',name:'Nombre',phone:'Teléfono',saveCustomer:'Guardar cliente',online:'● En línea · Español/English',checkSchedule:'Revisar agenda',replyCustomer:'Responder cliente',todaySummary:'Resumen de hoy',searchAppointments:'Buscar cita o servicio',searchCustomers:'Buscar cliente',askAI:'Pregúntale a tu asistente…',noAppointments:'No hay citas',noCustomers:'No hay clientes',visits:'visitas',saved:'Guardado correctamente',botHello:'Hola. Soy tu asistente de BellezaAI. ¿En qué te ayudo con el salón?'},
+en:{agendaDate:'Agenda date',clearDate:'Clear date',pendingConnection:'Not connected yet',salonPanel:'Your salon smart dashboard',hello:'Hello, Luis 👋',todayAppointments:"Today's appointments",clients:'Clients',todayIncome:"Today's income",yourAI:'Your AI assistant',aiIntro:'Check your appointments, service prices and durations.',talkAI:'Talk to my AI',nextAppointments:'Upcoming appointments',seeAll:'See all',appointments:'Appointments',customers:'Clients',settings:'Settings',home:'Home',all:'All',today:'Today',confirmed:'Confirmed',salon:'Salon',salonName:'Salon name',hours:'Business hours',assistant:'Assistant',autoReplies:'Automatic replies',autoRepliesSub:'Answer frequently asked questions',reminders:'Reminders',remindersSub:'24 hours before every appointment',reviewRequests:'Request reviews',reviewSub:'After every service',preferences:'Preferences',language:'Language',reports:'Reports',reportsSub:'Coming soon',newAppointment:'New appointment',clientName:'Client name',service:'Service',date:'Date',time:'Time',price:'Price',saveAppointment:'Save appointment',newCustomer:'New client',name:'Name',phone:'Phone',saveCustomer:'Save client',online:'● Online · Español/English',checkSchedule:'Check schedule',replyCustomer:'Reply to client',todaySummary:"Today's summary",searchAppointments:'Search appointment or service',searchCustomers:'Search client',askAI:'Ask your assistant…',noAppointments:'No appointments',noCustomers:'No clients',visits:'visits',saved:'Saved successfully',botHello:'Hi. I am your BellezaAI assistant. How can I help with the salon?'}};
 function esc(s){return String(s).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
 function showView(id){document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active',v.id===id));document.querySelectorAll('.navbtn').forEach(b=>b.classList.toggle('active',b.dataset.view===id));if(id==='appointments')renderAppointments();if(id==='customers')renderCustomers();if(id==='settings')loadReminders();window.scrollTo(0,0)}
 let reminderRequest = 0;
@@ -1313,5 +1313,32 @@ status.focus({ preventScroll: true });
 })();
 </script>
 
+
+<script>
+(() => {
+ let accountName = '', version = 0;
+ function renderProfile() {
+   const first = accountName.trim().split(/\s+/)[0];
+   document.querySelector('.hello').textContent = (lang === 'es' ? 'Hola' : 'Hi') + (first ? ', ' + first : '') + ' 👋';
+   document.querySelector('.avatar').textContent = accountName ? initials(accountName) : '👤';
+ }
+ async function loadProfile() {
+   const current = ++version, session = localStorage.getItem('bellezaAIToken') || '';
+   accountName = ''; renderProfile();
+   if (!session) return;
+   try {
+     const response = await fetch('/api/profile', {headers:{Authorization:'Bearer ' + session}});
+     if (!response.ok) return;
+     const data = await response.json();
+     if (current !== version || session !== (localStorage.getItem('bellezaAIToken') || '')) return;
+     accountName = typeof data.name === 'string' ? data.name : '';
+     renderProfile();
+   } catch { /* Keep a neutral greeting if the profile is unavailable. */ }
+ }
+ document.getElementById('language').addEventListener('change',renderProfile);
+ document.getElementById('loginDialog').addEventListener('close',loadProfile);
+ loadProfile();
+})();
+</script>
 </body>
 </html>
