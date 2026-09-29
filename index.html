@@ -170,7 +170,7 @@ function renderAppointments(){const q=(document.getElementById('appointmentSearc
 function setAgendaDate(){if(filter==='today'){filter='all';document.querySelectorAll('.chip').forEach(c=>c.classList.toggle('on',c.dataset.filter==='all'));}renderAppointments()}
 function setFilter(el,f){if(f==='today'||f==='all')document.getElementById('appointmentDateFilter').value='';filter=f;document.querySelectorAll('.chip').forEach(c=>c.classList.toggle('on',c===el));renderAppointments()}
 function initials(n){return n.split(/\s+/).slice(0,2).map(x=>x[0]).join('').toUpperCase()}
-function renderCustomers(){const q=(document.getElementById('customerSearch').value||'').toLowerCase();const rows=customers.filter(c=>(c.name+' '+c.phone+' '+c.email).toLowerCase().includes(q));document.getElementById('customerList').innerHTML=rows.map(c=>`<div class="item"><div class="customer-avatar">${esc(initials(c.name))}</div><div class="grow"><div class="item-title">${esc(c.name)}</div><div class="customer-meta">${esc(c.phone||c.email||'')} · ${Number(c.appointment_count)||0} ${lang==='es'?'citas no canceladas':'non-cancelled appointments'}</div></div><button class="ghost" data-history-client="${esc(c.id)}">Historial</button><button class="ghost" data-edit-client="${esc(c.id)}">Editar</button></div>`).join('')||emptyHTML(tr[lang].noCustomers)}
+function renderCustomers(){const q=(document.getElementById('customerSearch').value||'').toLowerCase();const rows=customers.filter(c=>(c.name+' '+c.phone+' '+c.email).toLowerCase().includes(q));document.getElementById('customerList').innerHTML=rows.map(c=>`<div class="item"><div class="customer-avatar">${esc(initials(c.name))}</div><div class="grow"><div class="item-title">${esc(c.name)}</div><div class="customer-meta">${esc(c.phone||c.email||'')} · ${Number(c.appointment_count)||0} ${lang==='es'?'citas no canceladas':'non-cancelled appointments'}</div><button class="link" data-book-client="${esc(c.id)}">${lang==='es'?'Nueva cita':'New appointment'}</button></div><button class="ghost" data-history-client="${esc(c.id)}">Historial</button><button class="ghost" data-edit-client="${esc(c.id)}">Editar</button></div>`).join('')||emptyHTML(tr[lang].noCustomers)}
 function openAppointment(){const f=document.getElementById('appointmentForm');f.reset();f.date.value=localDate(0);f.time.value='09:00';openModal('appointmentModal')}
 let editingClientId = null;
 function openCustomer(){
@@ -930,6 +930,10 @@ translate();renderHome();renderAppointments();renderCustomers();
     }
     return container.innerHTML;
   };
+  document.getElementById('customerList').addEventListener('click', event => {
+    const button = event.target.closest('[data-book-client]');
+    if (button) openAppointment(null, button.dataset.bookClient);
+  });
   document.addEventListener('click', async event => {
     const button = event.target.closest('[data-appointment-action]');
     if (!button || saving) return;
@@ -990,7 +994,7 @@ translate();renderHome();renderAppointments();renderCustomers();
     }
   }
 
-  openAppointment = async function(id = null) {
+  openAppointment = async function(id = null, clientId = null) {
     if (saving) return;
     const current = ++formVersion;
     const selected = id ? appointments.find(row => row.id === id) : null;
@@ -1000,7 +1004,9 @@ translate();renderHome();renderAppointments();renderCustomers();
     heading.textContent = editingId ? 'Editar / Reprogramar cita' : tr[lang].newAppointment;
     status.style.cssText = '';
     form.reset();
-    form.elements.namedItem('date').value = localDate(0);
+    const agendaDate = document.getElementById('appointments').classList.contains('active')
+      ? document.getElementById('appointmentDateFilter').value : '';
+    form.elements.namedItem('date').value = agendaDate || localDate(0);
     form.elements.namedItem('time').value = '09:00';
     options(clientSelect, [], 'Cargando clientes…');
     options(serviceSelect, [], 'Cargando servicios…');
@@ -1023,6 +1029,7 @@ translate();renderHome();renderAppointments();renderCustomers();
       [clients, services] = data;
       options(clientSelect, clients, 'Selecciona un cliente');
       options(serviceSelect, services, 'Selecciona un servicio');
+      if (clientId && clients.some(client => client.id === clientId)) clientSelect.value = clientId;
       if (selected) {
         clientSelect.value = selected.client_id;
         serviceSelect.value = selected.service_id;
