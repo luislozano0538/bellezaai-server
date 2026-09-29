@@ -35,6 +35,50 @@
     #chatModal .composer input{display:block!important;min-width:0;font-size:16px}
     #chatModal .send{display:block!important;flex:0 0 45px}
   </style>
+
+<script>
+(() => {
+  const originalFetch = window.fetch.bind(window);
+  let rejectedSession = '';
+  function showExpiry(session) {
+    if (!session || session !== localStorage.getItem('bellezaAIToken')) return;
+    rejectedSession = session;
+    if (!document.body) {document.addEventListener('DOMContentLoaded',()=>showExpiry(session),{once:true});return;}
+    let notice = document.getElementById('sessionExpiredNotice');
+    if (notice) return;
+    notice=document.createElement('div');notice.id='sessionExpiredNotice';notice.setAttribute('role','alert');
+    notice.style.cssText='position:fixed;left:12px;right:12px;top:12px;z-index:9999;background:#fff3cd;color:#422d08;padding:16px;border:1px solid #c99c35;border-radius:12px;box-shadow:0 4px 20px #0003';
+    const text=document.createElement('p');text.style.margin='0 0 8px';
+    const en=localStorage.getItem('bellezaAILang')==='en';
+    text.textContent=en?'Your session expired. Sign in again to continue. Your pending action has not been retried.':'Tu sesión venció. Vuelve a entrar para continuar. La operación pendiente no se ha repetido.';
+    const login=document.createElement('button');login.type='button';login.className='primary';login.textContent=en?'Sign in again':'Volver a entrar';
+    login.onclick=()=>{
+      const dialog=document.getElementById('loginDialog');
+      if (!dialog) return;
+      document.querySelectorAll('dialog[open]').forEach(other=>{if(other!==dialog)other.close();});
+      dialog.showModal();
+    };
+    notice.append(text,login);document.body.append(notice);
+  }
+  window.fetch = async function(input, options) {
+    let session='';
+    try {
+      const url=new URL(input instanceof Request ? input.url : String(input),location.href);
+      const headers=new Headers(options?.headers || (input instanceof Request ? input.headers : undefined));
+      const current=localStorage.getItem('bellezaAIToken');
+      if(url.origin===location.origin && url.pathname.startsWith('/api/') && !url.pathname.startsWith('/api/auth/') && current && headers.get('Authorization')==='Bearer '+current) session=current;
+    } catch {}
+    const response=await originalFetch(input,options);
+    if(response.status===401 && session) showExpiry(session);
+    else if(response.ok && session && session !== rejectedSession) {
+      document.getElementById('sessionExpiredNotice')?.remove();
+      rejectedSession='';
+    }
+    return response;
+  };
+})();
+</script>
+
 </head>
 <body>
 <div class="app">
