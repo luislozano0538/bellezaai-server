@@ -14,7 +14,9 @@ test('client edits are scoped to salon and preserve notes and appointments',asyn
  const {res,queries}=await run({name:' Luis ',phone:' 123 ',email:'luis@example.com'},[{id:'client',notes:'keep'}]);
  assert.equal(res.code,200);assert.equal(queries.length,1);
  assert.match(queries[0].sql,/WHERE id=\$1 AND salon_id=\$2/);
- assert.doesNotMatch(queries[0].sql,/SET[^]*notes=|appointments/);
+ assert.doesNotMatch(queries[0].sql,/appointments/);
+ assert.match(queries[0].sql,/notes=COALESCE\(\$6,notes\)/);
+ assert.equal(queries[0].params[5],null);
  assert.equal(queries[0].params[1],'salon-a');assert.equal(queries[0].params[2],'Luis');
  assert.equal(res.value.notes,'keep');
 });
@@ -25,4 +27,15 @@ test('invalid contact fields fail before database access',async()=>{
  for(const body of [{name:''},{name:'Luis',email:'bad address'},{name:'Luis',phone:123}]){
  const r=await run(body);assert.equal(r.res.code,400);assert.equal(r.queries.length,0);
  }
+});
+
+test('notes can be updated and explicitly cleared',async()=>{
+ for (const notes of [' Prefiere mañana ', '']) {
+   const r=await run({name:'Luis',notes},[{id:'client'}]);
+   assert.equal(r.res.code,200);assert.equal(r.queries[0].params[5],notes.trim());
+ }
+});
+test('oversized notes rejected',async()=>{
+ const r=await run({name:'Luis',notes:'x'.repeat(2001)});
+ assert.equal(r.res.code,400);assert.equal(r.queries.length,0);
 });
