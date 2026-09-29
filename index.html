@@ -1419,6 +1419,44 @@ status.focus({ preventScroll: true });
         });
         get('reportResult').append(list);
       }
+
+      const download = document.createElement('button');
+      download.type = 'button';
+      download.className = 'ghost';
+      download.textContent = es ? 'Descargar CSV para Excel' : 'Download CSV for Excel';
+      download.onclick = () => {
+        const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        const table = [
+          ['BellezaAI', es ? 'Resumen de reservas' : 'Booking summary'],
+          [es ? 'Desde' : 'From', from],
+          [es ? 'Hasta' : 'To', to],
+          [es ? 'Zona horaria' : 'Timezone', timezone],
+          [],
+          [es ? 'Indicador' : 'Metric', es ? 'Cantidad' : 'Count'],
+          ...metrics,
+          [],
+          [es ? 'Servicio (sin cancelaciones)' : 'Service (excluding cancellations)', es ? 'Reservas' : 'Bookings'],
+          ...[...groups.values()].sort((a,b)=>b.count-a.count||String(a.name).localeCompare(String(b.name))).map(group=>[group.name,group.count]),
+          [],
+          [es ? 'Las reservas no confirman asistencia ni pagos cobrados.' : 'Bookings do not confirm attendance or collected payments.']
+        ];
+        const cell = value => {
+          let text = String(value ?? '');
+          if (/^[\s]*[=+@-]/.test(text) || /^[\t\r\n]/.test(text)) text = "'" + text;
+          return '"' + text.replace(/"/g, '""') + '"';
+        };
+        const csv = '\uFEFF' + table.map(row=>row.map(cell).join(',')).join('\r\n');
+        const url = URL.createObjectURL(new Blob([csv], {type:'text/csv;charset=utf-8'}));
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'BellezaAI-reporte-' + from + '-' + to + '.csv';
+        document.body.append(link);
+        link.click();
+        link.remove();
+        setTimeout(()=>URL.revokeObjectURL(url), 1000);
+      };
+      get('reportResult').append(download);
+
       get('reportNotice').textContent=(es?'Fechas según tu dispositivo: ':'Dates use your device timezone: ')+Intl.DateTimeFormat().resolvedOptions().timeZone+'. '+(es?'Las reservas no confirman asistencia ni pagos cobrados.':'Bookings do not confirm attendance or collected payments.');
     } catch(error) {
       if(version === request) get('reportNotice').textContent=error.message;
