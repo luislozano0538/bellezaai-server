@@ -73,7 +73,7 @@ export function registerPublicBooking({app,pool,auth,validBusinessHours,withinBu
         pool.query("SELECT id,name,duration_minutes,price_label FROM services WHERE salon_id=$1 AND active=true ORDER BY name",[shop.id]),
         pool.query("SELECT id,name FROM professionals WHERE salon_id=$1 AND active=true ORDER BY name",[shop.id])
       ]);
-      res.set("Cache-Control","no-store").json({name:shop.name,timezone:shop.business_hours.timezone,services:services.rows,professionals:professionals.rows});
+      res.set("Cache-Control","no-store").json({name:shop.name,timezone:shop.business_hours.timezone,hours:shop.business_hours.days.map(day=>({open:day.open,start:day.start,end:day.end})),services:services.rows,professionals:professionals.rows});
     }catch(error){res.status(error.status||500).json({error:error.status?error.message:"No se pudo cargar el salón."});}
   });
   app.get("/api/public/salons/:id/slots",limit,async(req,res)=>{
