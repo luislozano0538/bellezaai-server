@@ -6,6 +6,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import pg from "pg";
 import OpenAI from "openai";
+import { registerPublicBooking } from "./public-booking.js";
 
 const { Pool } = pg;
 const app = express();
@@ -28,6 +29,7 @@ async function initDatabase() {
     );
 
     ALTER TABLE salons ADD COLUMN IF NOT EXISTS business_hours JSONB;
+    ALTER TABLE salons ADD COLUMN IF NOT EXISTS public_booking_enabled BOOLEAN NOT NULL DEFAULT false;
 
     CREATE TABLE IF NOT EXISTS users (
       id UUID PRIMARY KEY,
@@ -108,6 +110,16 @@ async function initDatabase() {
     UPDATE appointments a SET price_label_snapshot=COALESCE(s.price_label,'')
       FROM services s WHERE a.service_id=s.id AND a.salon_id=s.salon_id AND a.price_label_snapshot IS NULL;
 
+    CREATE TABLE IF NOT EXISTS public_booking_requests (
+      salon_id UUID NOT NULL REFERENCES salons(id) ON DELETE CASCADE,
+      request_id UUID NOT NULL,
+      payload_hash TEXT NOT NULL,
+      contact_hash TEXT NOT NULL,
+      appointment_id UUID NOT NULL REFERENCES appointments(id) ON DELETE CASCADE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY(salon_id,request_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_public_booking_recent ON public_booking_requests(salon_id,created_at);
     CREATE TABLE IF NOT EXISTS reminders (
       id UUID PRIMARY KEY,
       appointment_id UUID NOT NULL REFERENCES appointments(id) ON DELETE CASCADE,
@@ -1210,6 +1222,8 @@ app.post("/api/messages/send", auth, (_req, res) => {
     error: "Proveedor SMS/WhatsApp aún no conectado."
   });
 });
+
+registerPublicBooking({app,pool,auth,validBusinessHours,withinBusinessHours});
 
 async function start() {
   try {
