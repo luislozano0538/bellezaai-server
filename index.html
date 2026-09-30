@@ -106,7 +106,7 @@
         <input id="appointmentDateFilter" type="date" onchange="setAgendaDate()" style="padding:8px;border:1px solid #eee6ed;border-radius:10px">
         <button class="ghost" type="button" onclick="document.getElementById('appointmentDateFilter').value='';renderAppointments()" data-t="clearDate">Quitar fecha</button>
       </div>
-      <div class="chips"><button class="chip on" data-filter="all" onclick="setFilter(this,'all')" data-t="all">Todas</button><button class="chip" data-filter="today" onclick="setFilter(this,'today')" data-t="today">Hoy</button><button class="chip" data-filter="confirmed" onclick="setFilter(this,'confirmed')" data-t="confirmed">Confirmadas</button><button class="chip" data-filter="cancelled" onclick="setFilter(this,'cancelled')">Canceladas</button></div>
+      <div class="chips"><button class="chip on" data-filter="all" onclick="setFilter(this,'all')" data-t="all">Todas</button><button class="chip" data-filter="today" onclick="setFilter(this,'today')" data-t="today">Hoy</button><button class="chip" data-filter="confirmed" onclick="setFilter(this,'confirmed')" data-t="confirmed">Confirmadas</button><button class="chip" data-filter="cancelled" onclick="setFilter(this,'cancelled')">Canceladas</button><button class="chip" data-filter="completed" onclick="setFilter(this,'completed')">Atendidas</button><button class="chip" data-filter="no_show" onclick="setFilter(this,'no_show')">No asistió</button></div>
       <div id="appointmentList"></div>
     </section>
 
@@ -206,11 +206,11 @@ async function loadReminders() {
 }
 function prettyDate(date){return new Intl.DateTimeFormat(lang==='es'?'es-US':'en-US',{weekday:'short',month:'short',day:'numeric'}).format(new Date(date+'T12:00:00'))}
 function prettyTime(t){let [h,m]=t.split(':').map(Number);const ap=h>=12?'PM':'AM';h=h%12||12;return `${h}:${String(m).padStart(2,'0')} ${ap}`}
-function renderHome(){const todays=appointments.filter(a=>a.status!=='cancelled'&&a.date===localDate(0));document.getElementById('todayCount').textContent=todays.length;document.getElementById('clientCount').textContent=customers.length;document.getElementById('income').textContent='$'+todays.reduce((s,a)=>s+Number(a.price||0),0);document.getElementById('homeAppointments').innerHTML=(appointments.filter(a=>a.status!=='cancelled'&&a.date>=localDate(0)).sort(sortAppt).slice(0,3).map(a=>appointmentHTML(a,false)).join('')||emptyHTML(tr[lang].noAppointments))}
+function renderHome(){const todays=appointments.filter(a=>a.status!=='cancelled'&&a.date===localDate(0));document.getElementById('todayCount').textContent=todays.length;document.getElementById('clientCount').textContent=customers.length;document.getElementById('income').textContent='$'+todays.reduce((s,a)=>s+Number(a.price||0),0);document.getElementById('homeAppointments').innerHTML=(appointments.filter(a=>a.status==='confirmed'&&a.date>=localDate(0)).sort(sortAppt).slice(0,3).map(a=>appointmentHTML(a,false)).join('')||emptyHTML(tr[lang].noAppointments))}
 function sortAppt(a,b){return (a.date+a.time).localeCompare(b.date+b.time)}
 function appointmentHTML(a,showDate=true){return `<div class="item"><div class="timebox">${showDate?esc(prettyDate(a.date))+'<br>':''}${esc(prettyTime(a.time))}</div><div class="grow"><div class="item-title">${esc(a.name)}</div><div class="item-sub">${esc(a.service)} · <span class="badge">${tr[lang].confirmed}</span></div></div><div class="price">$${Number(a.price||0)}</div></div>`}
 function emptyHTML(t){return `<div class="empty"><b>${esc(t)}</b>Usa el botón + para comenzar.</div>`}
-function renderAppointments(){const q=(document.getElementById('appointmentSearch').value||'').toLowerCase();const selectedDate=document.getElementById('appointmentDateFilter').value;let rows=appointments.filter(a=>(!selectedDate||a.date===selectedDate)&&(!document.getElementById('agendaProfessional')?.value||(document.getElementById('agendaProfessional').value==='unassigned'?!a.professional_id:a.professional_id===document.getElementById('agendaProfessional').value))&&(filter!=='today'||a.date===localDate(0))&&(filter!=='confirmed'||a.status==='confirmed')&&(filter!=='cancelled'||a.status==='cancelled')&&(a.name+' '+a.service).toLowerCase().includes(q)).sort(sortAppt);document.getElementById('appointmentList').innerHTML=rows.map(a=>appointmentHTML(a,true)).join('')||emptyHTML(tr[lang].noAppointments)}
+function renderAppointments(){const q=(document.getElementById('appointmentSearch').value||'').toLowerCase();const selectedDate=document.getElementById('appointmentDateFilter').value;let rows=appointments.filter(a=>(!selectedDate||a.date===selectedDate)&&(!document.getElementById('agendaProfessional')?.value||(document.getElementById('agendaProfessional').value==='unassigned'?!a.professional_id:a.professional_id===document.getElementById('agendaProfessional').value))&&(filter!=='today'||a.date===localDate(0))&&(filter!=='confirmed'||a.status==='confirmed')&&(filter!=='cancelled'||a.status==='cancelled')&&(filter!=='completed'||a.status==='completed')&&(filter!=='no_show'||a.status==='no_show')&&(a.name+' '+a.service).toLowerCase().includes(q)).sort(sortAppt);document.getElementById('appointmentList').innerHTML=rows.map(a=>appointmentHTML(a,true)).join('')||emptyHTML(tr[lang].noAppointments)}
 function setAgendaDate(){if(filter==='today'){filter='all';document.querySelectorAll('.chip').forEach(c=>c.classList.toggle('on',c.dataset.filter==='all'));}renderAppointments()}
 function setFilter(el,f){if(f==='today'||f==='all')document.getElementById('appointmentDateFilter').value='';filter=f;document.querySelectorAll('.chip').forEach(c=>c.classList.toggle('on',c===el));renderAppointments()}
 function initials(n){return n.split(/\s+/).slice(0,2).map(x=>x[0]).join('').toUpperCase()}
@@ -987,7 +987,7 @@ translate();renderHome();renderAppointments();renderCustomers();
     }
     const badge = container.querySelector('.badge');
     if (badge && appointment.status !== 'confirmed') {
-      badge.textContent = appointment.status === 'cancelled' ? (lang === 'es' ? 'Cancelada' : 'Cancelled') : appointment.status;
+      badge.textContent = ({cancelled:lang==='es'?'Cancelada':'Cancelled',completed:lang==='es'?'Atendida':'Attended',no_show:lang==='es'?'No asistió':'No-show'})[appointment.status] || appointment.status;
     }
     if (appointment.status === 'confirmed') {
       const actions = document.createElement('div');
@@ -1003,8 +1003,31 @@ translate();renderHome();renderAppointments();renderCustomers();
       }
       container.append(actions);
     }
+    if (['confirmed','completed','no_show'].includes(appointment.status) && new Date(appointment.starts_at)<=new Date()) {
+      const attendance=document.createElement('div');
+      attendance.style.cssText='display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px';
+      const choices=[['completed',lang==='es'?'Atendida':'Attended'],['no_show',lang==='es'?'No asistió':'No-show'],['confirmed',lang==='es'?'Quitar marca de asistencia':'Clear attendance']];
+      choices.forEach(([state,label])=>{
+        if(state===appointment.status || (state==='confirmed' && appointment.status==='confirmed') || (state==='completed' && new Date(appointment.ends_at)>new Date()))return;
+        const button=document.createElement('button');button.type='button';button.className='ghost';button.textContent=label;button.dataset.attendance=state;button.dataset.appointmentId=appointment.id;attendance.append(button);
+      });
+      container.append(attendance);
+    }
     return container.innerHTML;
   };
+  document.addEventListener('click',async event=>{
+    const button=event.target.closest('[data-attendance]');
+    if(!button || saving)return;
+    const appointment=appointments.find(row=>row.id===button.dataset.appointmentId);
+    if(!appointment)return;
+    if(!confirm((lang==='es'?'¿Guardar «':'Save “')+button.textContent+(lang==='es'?'» para ':'” for ')+appointment.name+'?'))return;
+    saving=true;button.disabled=true;
+    try {
+      await api('appointments/'+encodeURIComponent(appointment.id)+'/attendance','PATCH',{status:button.dataset.attendance,expectedStatus:appointment.status});
+      await loadAppointments();toast(lang==='es'?'Asistencia guardada':'Attendance saved');
+    } catch(error){notice.textContent=error.message;toast(error.message);}
+    finally{saving=false;button.disabled=false;}
+  });
   document.getElementById('customerList').addEventListener('click', event => {
     const button = event.target.closest('[data-book-client]');
     if (button) openAppointment(null, button.dataset.bookClient);
@@ -1254,7 +1277,7 @@ status.focus({ preventScroll: true });
        const name = document.createElement('strong');
        name.textContent = appointment.service || 'Servicio no disponible';
        const details = document.createElement('div');
-       const states = {confirmed:'Confirmada',cancelled:'Cancelada',completed:'Completada',pending:'Pendiente'};
+       const states = {confirmed:'Confirmada',cancelled:'Cancelada',completed:'Atendida',no_show:'No asistió',pending:'Pendiente'};
        details.textContent = new Date(appointment.starts_at).toLocaleString('es', {dateStyle:'medium',timeStyle:'short'}) + ' · ' + (states[appointment.status] || appointment.status);
        item.append(name, details);
        list.append(item);
@@ -1469,6 +1492,8 @@ status.focus({ preventScroll: true });
         [es?'Citas registradas':'Recorded appointments',rows.length],
         [es?'Citas no canceladas':'Non-cancelled appointments',active.length],
         [es?'Canceladas':'Cancelled',rows.length-active.length],
+        [es?'Atendidas':'Attended',rows.filter(row=>row.status==='completed').length],
+        [es?'No asistió':'No-shows',rows.filter(row=>row.status==='no_show').length],
         [es?'Clientes con citas no canceladas':'Clients with non-cancelled appointments',new Set(active.map(row=>row.client_id)).size]
       ];
       const grid = document.createElement('div');
