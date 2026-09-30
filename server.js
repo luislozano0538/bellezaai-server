@@ -960,6 +960,29 @@ app.patch("/api/appointments/:id", auth, async (req, res) => {
 // ==================== ENDPOINTS DE PROFESIONALES ====================
 
 // Preparation only: no provider is connected and no messages are sent.
+
+app.patch("/api/appointments/:id/attendance", auth, async (req, res) => {
+  const {status, expectedStatus} = req.body || {};
+  const allowed = ["confirmed","completed","no_show"];
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.params.id) || !allowed.includes(status) || !allowed.includes(expectedStatus)) return res.status(400).json({error:"Asistencia inválida."});
+  let db, committed=false;
+  try {
+    db=await pool.connect();
+    await db.query("BEGIN");
+    await db.query("SELECT pg_advisory_xact_lock(hashtext($1))",[req.user.salonId]);
+    const found=await db.query("SELECT * FROM appointments WHERE id=$1 AND salon_id=$2 FOR UPDATE",[req.params.id,req.user.salonId]);
+    const appointment=found.rows[0];
+    if(!appointment) return res.status(404).json({error:"Cita no encontrada."});
+    if(!allowed.includes(appointment.status) || appointment.status!==expectedStatus) return res.status(409).json({error:"La cita cambió. Actualiza la agenda antes de modificar su asistencia."});
+    const now=new Date();
+    if(new Date(appointment.starts_at)>now || (status==="completed" && new Date(appointment.ends_at)>now)) return res.status(400).json({error:"Registra la asistencia después del inicio; marca atendida cuando termine el horario de la cita."});
+    const result=await db.query("UPDATE appointments SET status=$3 WHERE id=$1 AND salon_id=$2 RETURNING *",[req.params.id,req.user.salonId,status]);
+    await db.query("UPDATE reminders SET status='cancelled' WHERE appointment_id=$1 AND sent_at IS NULL AND status<>'sent'",[req.params.id]);
+    await db.query("COMMIT");committed=true;res.json(result.rows[0]);
+  } catch(error) {console.error(error);res.status(500).json({error:"No se pudo guardar la asistencia."});}
+  finally {if(db){if(!committed)await db.query("ROLLBACK").catch(()=>{});db.release();}}
+});
+
 app.get("/api/reminders", auth, async (req, res) => {
   try {
     const q = await pool.query(
