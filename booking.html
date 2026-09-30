@@ -2,9 +2,10 @@
 <html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Reserva tu cita · BellezaAI</title>
 <style>
 :root{font-family:system-ui,sans-serif;color:#2b2030;background:#f8f4f8;color-scheme:light}*{box-sizing:border-box}body{margin:0}header{background:linear-gradient(120deg,#593162,#ae648f);color:white;padding:40px 24px}header>div,main{max-width:760px;margin:auto}header small{letter-spacing:2px}h1{font-size:32px;margin:10px 0}main{padding:24px 18px 60px}.card{background:white;border:1px solid #eadfea;border-radius:22px;padding:24px;margin-bottom:18px}h2{font-size:20px;margin-top:0}label{display:block;font-weight:600;margin:16px 0 8px}input,select{width:100%;font:inherit;padding:13px;border:1px solid #c8bacb;border-radius:10px;background:white;color:inherit}button{font:inherit;cursor:pointer;border:1px solid #c8bacb;border-radius:12px;padding:12px 16px;background:white;color:#593162}button:disabled{opacity:.5;cursor:default}.primary{background:#703e7b;color:white;border:0;font-weight:700;width:100%;margin-top:20px}.slots{display:flex;flex-wrap:wrap;gap:10px;margin:16px 0}.slots button[aria-pressed=true]{background:#703e7b;color:white}.muted{color:#67586c;line-height:1.5}#notice{padding:12px 0;white-space:pre-wrap}#confirmation{border:2px solid #4d896d}.offscreen{position:absolute;left:-10000px}a{color:#703e7b}.steps{font-size:14px;opacity:.9}#summary{background:#f8f4f8;border-radius:12px;padding:16px;white-space:pre-line}
+#weeklyHours{margin:0}#weeklyHours>div{display:flex;justify-content:space-between;gap:16px;padding:8px 0;border-bottom:1px solid #eadfea}#weeklyHours dd{margin:0;text-align:right}
 </style></head><body>
 <header><div><small>BELLEZAAI</small><h1 id="salonName">Reserva tu próxima cita</h1><p class="steps">Servicio → Profesional → Horario → Confirmación</p></div></header>
-<main><p id="notice" role="status">Cargando el salón…</p><form id="bookingForm" hidden>
+<main><p id="notice" role="status">Cargando el salón…</p><section class="card" id="salonHours" hidden><h2>Horario del salón</h2><dl id="weeklyHours"></dl><p class="muted">Las horas disponibles dependen de la duración del servicio y de las citas ya reservadas.</p></section><form id="bookingForm" hidden>
 <section class="card"><h2>1. Elige tu servicio</h2><label for="service">Servicio</label><select id="service" required></select><p id="serviceInfo" class="muted"></p><label for="professional">Profesional</label><select id="professional"></select></section>
 <section class="card"><h2>2. Encuentra tu horario</h2><p id="timezone" class="muted"></p><label for="date">Día de tu cita</label><input id="date" type="date" required><p class="muted">Reservas con al menos 30 minutos de anticipación, hasta 90 días.</p><button type="button" id="findSlots">Ver horarios disponibles</button><p id="slotNotice" role="status"></p><div id="slots" class="slots"></div></section>
 <section class="card"><h2>3. Tus datos</h2><label for="name">Nombre</label><input id="name" autocomplete="name" maxlength="120" required><label for="phone">Teléfono de contacto</label><input id="phone" type="tel" autocomplete="tel" maxlength="30" required><label for="email">Correo (opcional)</label><input id="email" type="email" autocomplete="email" maxlength="254"><label class="offscreen" aria-hidden="true">Página web<input id="website" tabindex="-1" autocomplete="off"></label><p class="muted">Tus datos se entregan a este salón para gestionar la cita.</p><div id="summary">Elige un horario para revisar tu reserva.</div><button class="primary" id="submitBooking" disabled>Confirmar reserva</button><p class="muted">No se realiza ningún cobro en esta página.</p></section></form>
@@ -99,6 +100,15 @@
     try {
       catalog=await api('');
       $('salonName').textContent=catalog.name;document.title=catalog.name+' · Reservar';
+      if(Array.isArray(catalog.hours)&&catalog.hours.length===7){
+        const names=['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+        const time=value=>{const [h,m]=value.split(':').map(Number);return (h%12||12)+':'+String(m).padStart(2,'0')+(h<12?' a. m.':' p. m.');};
+        [1,2,3,4,5,6,0].forEach(index=>{
+          const day=catalog.hours[index],row=document.createElement('div'),name=document.createElement('dt'),value=document.createElement('dd');
+          name.textContent=names[index];value.textContent=day.open?time(day.start)+' – '+time(day.end):'Cerrado';row.append(name,value);$('weeklyHours').append(row);
+        });
+        $('salonHours').hidden=false;
+      }
       $('service').add(new Option('Selecciona un servicio',''));
       catalog.services.forEach(item=>$('service').add(new Option(item.name,item.id)));
       $('professional').add(new Option('Sin preferencia (disponibilidad del salón)',''));
