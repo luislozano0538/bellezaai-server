@@ -1693,5 +1693,50 @@ status.focus({ preventScroll: true });
 })();
 </script>
 
+
+<script>
+(() => {
+  const section=document.createElement('div');section.className='setting-group';
+  section.innerHTML='<div class="setting-title">Reservas en línea</div><div style="padding:18px"><p>Comparte una página para que tus clientes elijan servicio, profesional y horario.</p><p class="small">Al activarla se publican el nombre del salón, los servicios con precios y duración, y los nombres de los profesionales activos. Los datos de clientes y sus citas no se publican.</p><p class="small">Se usa el horario del salón. Configúralo antes de activar las reservas. Los teléfonos introducidos por clientes aún no se verifican por SMS.</p><button type="button" class="ghost" id="publicRefresh">Actualizar estado</button><p id="publicStatus" role="status"></p><label>Enlace de reservas<input id="publicLink" readonly style="display:block;width:100%;margin:10px 0"></label><button type="button" class="ghost" id="publicCopy">Copiar enlace</button> <a id="publicOpen" target="_blank" rel="noopener">Abrir página</a><button type="button" class="primary" id="publicToggle" disabled style="display:block;margin-top:16px">Cargando…</button></div>';
+  document.getElementById('settings').append(section);
+  const get=id=>document.getElementById(id);let enabled=false,busy=false;
+  async function api(method,body) {
+    const session=localStorage.getItem('bellezaAIToken');
+    if(!session)throw Error('Inicia sesión para configurar las reservas.');
+    const response=await fetch('/api/salon/public-booking',{method,headers:{'Content-Type':'application/json',Authorization:'Bearer '+session},...(body?{body:JSON.stringify(body)}:{})});
+    const data=await response.json();
+    if(session!==localStorage.getItem('bellezaAIToken'))throw Error('La sesión cambió.');
+    if(!response.ok)throw Error(data.error||'No se pudo cargar la configuración.');
+    return data;
+  }
+  async function load() {
+    get('publicToggle').disabled=true;
+    try {
+      const data=await api('GET');enabled=data.enabled;
+      get('publicLink').value=location.origin+data.path;get('publicOpen').href=data.path;
+      get('publicToggle').textContent=enabled?'Pausar reservas en línea':'Activar reservas en línea';
+      get('publicStatus').textContent=enabled?'Página publicada. Puedes compartir el enlace.':data.ready?'Página sin publicar. Actívala cuando quieras recibir reservas.':'Configura primero el horario del salón y un día de atención.';
+      get('publicToggle').disabled=!enabled&&!data.ready;
+    }catch(error){get('publicStatus').textContent=error.message;}
+  }
+  get('publicRefresh').onclick=()=>{if(!busy)load();};
+  get('publicCopy').onclick=async()=>{
+    if(!get('publicLink').value)return;
+    try{await navigator.clipboard.writeText(get('publicLink').value);get('publicStatus').textContent='Enlace copiado.';}
+    catch{get('publicLink').select();get('publicStatus').textContent='Seleccioné el enlace para que puedas copiarlo.';}
+  };
+  get('publicToggle').onclick=async()=>{
+    if(busy)return;busy=true;get('publicToggle').disabled=true;
+    try{await api('PATCH',{enabled:!enabled});await load();}
+    catch(error){get('publicStatus').textContent=error.message;get('publicToggle').disabled=false;}
+    finally{busy=false;}
+  };
+  get('loginDialog').addEventListener('close',()=>{if(!busy)load();});
+  const observer=new MutationObserver(()=>{if(get('settings').classList.contains('active')&&!busy)load();});
+  observer.observe(get('settings'),{attributes:true,attributeFilter:['class']});
+  load();
+})();
+</script>
+
 </body>
 </html>
