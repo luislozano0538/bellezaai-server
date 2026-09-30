@@ -7,7 +7,7 @@
 <header><div><small>BELLEZAAI</small><h1 id="salonName">Reserva tu próxima cita</h1><p class="steps">Servicio → Profesional → Horario → Confirmación</p></div></header>
 <main><p id="notice" role="status">Cargando el salón…</p><section class="card" id="salonHours" hidden><h2>Horario del salón</h2><dl id="weeklyHours"></dl><p class="muted">Las horas disponibles dependen de la duración del servicio y de las citas ya reservadas.</p></section><form id="bookingForm" hidden>
 <section class="card"><h2>1. Elige tu servicio</h2><label for="service">Servicio</label><select id="service" required></select><p id="serviceInfo" class="muted"></p><label for="professional">Profesional</label><select id="professional"></select></section>
-<section class="card"><h2>2. Encuentra tu horario</h2><p id="timezone" class="muted"></p><label for="date">Día de tu cita</label><input id="date" type="date" required><p class="muted">Reservas con al menos 30 minutos de anticipación, hasta 90 días.</p><button type="button" id="findSlots">Ver horarios disponibles</button><p id="slotNotice" role="status"></p><div id="slots" class="slots"></div></section>
+<section class="card"><h2>2. Encuentra tu horario</h2><p id="timezone" class="muted"></p><label for="date">Día de tu cita</label><input id="date" type="date" required><p class="muted">Reservas con al menos 30 minutos de anticipación, hasta 90 días.</p><button type="button" id="findSlots">Ver horarios disponibles</button> <button type="button" id="findNext">Buscar la próxima cita disponible</button> <button type="button" id="stopSearch" hidden>Detener búsqueda</button><p class="muted">La búsqueda recorre hasta 14 días desde la fecha elegida, con el servicio y profesional seleccionados.</p><p id="slotNotice" role="status"></p><div id="slots" class="slots"></div></section>
 <section class="card"><h2>3. Tus datos</h2><label for="name">Nombre</label><input id="name" autocomplete="name" maxlength="120" required><label for="phone">Teléfono de contacto</label><input id="phone" type="tel" autocomplete="tel" maxlength="30" required><label for="email">Correo (opcional)</label><input id="email" type="email" autocomplete="email" maxlength="254"><label class="offscreen" aria-hidden="true">Página web<input id="website" tabindex="-1" autocomplete="off"></label><p class="muted">Tus datos se entregan a este salón para gestionar la cita.</p><div id="summary">Elige un horario para revisar tu reserva.</div><button class="primary" id="submitBooking" disabled>Confirmar reserva</button><p class="muted">No se realiza ningún cobro en esta página.</p></section></form>
 <section class="card" id="confirmation" hidden><h2>Tu cita está confirmada</h2><p id="confirmedDetails" style="white-space:pre-line"></p><p id="reference"></p><button type="button" id="saveCalendar" hidden>Guardar en mi calendario</button><p id="calendarHelp" class="muted" hidden>Descarga el archivo y ábrelo en tu calendario. Si la cita cambia o se cancela, actualiza también tu calendario: esta copia no se sincroniza automáticamente.</p><p class="muted">Guarda esta confirmación. No se ha enviado un mensaje ni se ha realizado un cobro. Para cambios o cancelaciones, contacta directamente con el salón.</p></section>
 </main><script>
@@ -48,7 +48,9 @@
     setTimeout(()=>URL.revokeObjectURL(url),60000);
   };
 
-  function resetSlots() {version++;selected='';$('slots').replaceChildren();$('submitBooking').disabled=true;$('summary').textContent='Elige un horario para revisar tu reserva.';$('slotNotice').textContent='';}
+  let slotController=null;
+  function finishSearch(){ $('findSlots').disabled=false;$('findNext').disabled=false;$('stopSearch').hidden=true; }
+  function resetSlots() {if(slotController)slotController.abort();slotController=null;finishSearch();version++;selected='';$('slots').replaceChildren();$('submitBooking').disabled=true;$('summary').textContent='Elige un horario para revisar tu reserva.';$('slotNotice').textContent='';}
   async function api(path,options) {
     const response=await fetch(base+path,options);
     const data=await response.json();
@@ -56,24 +58,46 @@
     return data;
   }
   ['service','professional','date'].forEach(key=>$(key).addEventListener('change',()=>{resetSlots();if(catalog){const item=service();$('serviceInfo').textContent=item?item.duration_minutes+' minutos · '+(item.price_label||'Consultar precio'):'';}}));
-  $('findSlots').onclick=async()=>{
+  function showSlots(slots,date) {
+    $('date').value=date;
+    const label=new Intl.DateTimeFormat('es',{timeZone:'UTC',dateStyle:'full'}).format(new Date(date+'T12:00:00Z'));
+    $('slotNotice').textContent=slots.length?'Horarios para '+label+'. Selecciona una hora:':'No hay horarios disponibles para esta selección. Prueba otro día o profesional.';
+    slots.forEach(iso=>{
+      const button=document.createElement('button');button.type='button';button.setAttribute('aria-pressed','false');
+      button.textContent=new Intl.DateTimeFormat('es',{timeZone:catalog.timezone,hour:'2-digit',minute:'2-digit',timeZoneName:'short'}).format(new Date(iso));
+      button.onclick=()=>{selected=iso;$('slots').querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b===button)));$('summary').textContent=summary();$('submitBooking').disabled=false;};
+      $('slots').append(button);
+    });
+  }
+  async function searchSlots(nextAvailable) {
     if(busy)return;
     resetSlots();const current=version;
-    if(!$('service').value||!$('date').value){$('slotNotice').textContent='Elige servicio y fecha.';return;}
-    $('slotNotice').textContent='Buscando horarios…';
+    const startDate=$('date').value,serviceId=$('service').value,professionalId=$('professional').value;
+    if(!serviceId||!startDate||!$('date').checkValidity()){$('slotNotice').textContent='Elige servicio y una fecha dentro del período permitido.';return;}
+    const controller=new AbortController();slotController=controller;
+    $('findSlots').disabled=true;$('findNext').disabled=true;$('stopSearch').hidden=false;
+    let lastDate=startDate;
     try {
-      const query=new URLSearchParams({serviceId:$('service').value,professionalId:$('professional').value,date:$('date').value});
-      const data=await api('/slots?'+query);
-      if(current!==version)return;
-      $('slotNotice').textContent=data.slots.length?'Selecciona una hora:':'No hay horarios disponibles para esta selección. Prueba otro día o profesional.';
-      data.slots.forEach(iso=>{
-        const button=document.createElement('button');button.type='button';button.setAttribute('aria-pressed','false');
-        button.textContent=new Intl.DateTimeFormat('es',{timeZone:catalog.timezone,hour:'2-digit',minute:'2-digit',timeZoneName:'short'}).format(new Date(iso));
-        button.onclick=()=>{selected=iso;$('slots').querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b===button)));$('summary').textContent=summary();$('submitBooking').disabled=false;};
-        $('slots').append(button);
-      });
-    }catch(error){if(current===version)$('slotNotice').textContent=error.message;}
-  };
+      for(let offset=0;offset<(nextAvailable?14:1);offset++){
+        if(current!==version)return;
+        const day=new Date(startDate+'T12:00:00Z');day.setUTCDate(day.getUTCDate()+offset);
+        const date=day.toISOString().slice(0,10);
+        if(date>$('date').max)break;
+        lastDate=date;
+        $('slotNotice').textContent=nextAvailable?'Buscando la próxima cita disponible… Día '+(offset+1)+' de hasta 14.':'Buscando horarios…';
+        if(nextAvailable&&catalog.hours?.[day.getUTCDay()]?.open===false)continue;
+        const query=new URLSearchParams({serviceId,professionalId,date});
+        const data=await api('/slots?'+query,{signal:controller.signal});
+        if(current!==version)return;
+        if(data.slots.length||!nextAvailable){showSlots(data.slots,date);return;}
+      }
+      $('slotNotice').textContent='No hay horarios disponibles entre '+startDate+' y '+lastDate+' para esta selección. Elige otra fecha de inicio o profesional.';
+    }catch(error){if(current===version&&error.name!=='AbortError')$('slotNotice').textContent=error.message;}
+    finally{if(current===version){slotController=null;finishSearch();}}
+  }
+  $('findSlots').onclick=()=>searchSlots(false);
+  $('findNext').onclick=()=>searchSlots(true);
+  $('stopSearch').onclick=()=>{resetSlots();$('slotNotice').textContent='Búsqueda detenida. Puedes cambiar la fecha o el profesional.';};
   $('bookingForm').onsubmit=async event=>{
     event.preventDefault();if(busy||!selected)return;
     const payload={name:$('name').value.trim(),phone:$('phone').value.trim(),email:$('email').value.trim(),website:$('website').value,serviceId:$('service').value,professionalId:$('professional').value||null,startsAt:selected,date:$('date').value};
