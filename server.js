@@ -75,6 +75,8 @@ async function initDatabase() {
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
 
+    ALTER TABLE professionals ADD COLUMN IF NOT EXISTS weekly_hours JSONB;
+
     CREATE TABLE IF NOT EXISTS professional_specialties (
       id UUID PRIMARY KEY,
       professional_id UUID NOT NULL REFERENCES professionals(id) ON DELETE CASCADE,
@@ -346,6 +348,43 @@ function withinBusinessHours(hours, start, end) {
   return !!day?.open && a.year === b.year && a.month === b.month && a.day === b.day &&
     a.hour + ":" + a.minute >= day.start && b.hour + ":" + b.minute <= day.end;
 }
+
+
+async function professionalWorks(db, salonId, professionalId, start, end) {
+  if (!professionalId) return true;
+  const row=(await db.query("SELECT p.weekly_hours,s.business_hours FROM professionals p JOIN salons s ON s.id=p.salon_id WHERE p.id=$1 AND p.salon_id=$2 AND p.active=true FOR SHARE OF p,s",[professionalId,salonId])).rows[0];
+  if (!row) return false;
+  if (row.weekly_hours===null) return true;
+  const hours={timezone:row.business_hours?.timezone,days:row.weekly_hours};
+  return validBusinessHours(hours) && withinBusinessHours(hours,start,end);
+}
+
+app.patch("/api/professionals/:id/hours",auth,async(req,res)=>{
+  if(req.user.role!=="owner")return res.status(403).json({error:"Solo el propietario puede editar los horarios del equipo."});
+  if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.params.id))return res.status(400).json({error:"Profesional inválido."});
+  const days=req.body?.days;
+  if(days!==null && !Array.isArray(days))return res.status(400).json({error:"Revisa los días y las horas."});
+  let db;
+  try{
+    db=await pool.connect();await db.query("BEGIN");
+    await db.query("SELECT pg_advisory_xact_lock(hashtext($1))",[req.user.salonId]);
+    const shop=(await db.query("SELECT business_hours FROM salons WHERE id=$1 FOR SHARE",[req.user.salonId])).rows[0];
+    const hours={timezone:shop?.business_hours?.timezone,days};
+    if(days!==null && !validBusinessHours(hours)){
+      await db.query("ROLLBACK");return res.status(400).json({error:"Configura primero la zona horaria del salón y revisa las horas del profesional."});
+    }
+    const normalized=days===null?null:days.map(day=>day.open?{open:true,start:day.start,end:day.end}:{open:false});
+    const result=await db.query("UPDATE professionals SET weekly_hours=$3 WHERE id=$1 AND salon_id=$2 RETURNING id,weekly_hours",[req.params.id,req.user.salonId,normalized===null?null:JSON.stringify(normalized)]);
+    if(!result.rows[0]){await db.query("ROLLBACK");return res.status(404).json({error:"Profesional no encontrado."});}
+    let outside=0;
+    if(normalized){
+      const future=await db.query("SELECT starts_at,ends_at FROM appointments WHERE salon_id=$1 AND professional_id=$2 AND status='confirmed' AND ends_at>NOW()",[req.user.salonId,req.params.id]);
+      outside=future.rows.filter(a=>!withinBusinessHours({timezone:hours.timezone,days:normalized},new Date(a.starts_at),new Date(a.ends_at))).length;
+    }
+    await db.query("COMMIT");res.json({...result.rows[0],outsideAppointments:outside});
+  }catch(error){if(db)await db.query("ROLLBACK").catch(()=>{});res.status(500).json({error:"No se pudo guardar el horario del profesional."});}
+  finally{if(db)db.release();}
+});
 
 app.get("/api/salon/hours", auth, async (req, res) => {
   try {
@@ -789,6 +828,10 @@ app.post("/api/appointments", auth, async (req, res) => {
       start.getTime() + service.rows[0].duration_minutes * 60000
     );
 
+    if (!await professionalWorks(db,req.user.salonId,professionalId,start,end)) {
+      return res.status(409).json({error:"La cita queda fuera del horario de trabajo del profesional. Elige otra hora o profesional."});
+    }
+
     // Validar conflictos: si hay professional_id, solo verificar ese profesional
     // Si no hay professional_id, verificar todo el salón (comportamiento anterior)
     let conflictQuery;
@@ -926,6 +969,7 @@ app.patch("/api/appointments/:id", auth, async (req, res) => {
         return res.status(404).json({ error: "Cliente o servicio no encontrado en tu salón." });
       }
       const end = new Date(start.getTime() + service.rows[0].duration_minutes * 60000);
+      if (!await professionalWorks(db,req.user.salonId,professionalId,start,end)) return res.status(409).json({error:"La cita queda fuera del horario de trabajo del profesional. Elige otra hora o profesional."});
       const conflict = await db.query(
         `SELECT id FROM appointments
          WHERE salon_id=$1 AND id<>$2 AND status<>'cancelled'
@@ -1023,7 +1067,7 @@ app.get("/api/reminders", auth, async (req, res) => {
 app.get("/api/professionals", auth, async (req, res) => {
   try {
     const q = await pool.query(
-      `SELECT id, name, phone, email, profile_photo_url, active,
+      `SELECT id, name, phone, email, profile_photo_url, active, weekly_hours,
               commission_type, commission_value, membership_fee, created_at
        FROM professionals
        WHERE salon_id=$1
