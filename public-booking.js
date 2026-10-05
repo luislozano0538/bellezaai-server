@@ -1,7 +1,8 @@
 
 import crypto from "crypto";
+import { bookingReceipt, registerPublicManagement } from "./public-management.js";
 
-export function registerPublicBooking({app,pool,auth,validBusinessHours,withinBusinessHours}) {
+export function registerPublicBooking({app,pool,auth,validBusinessHours,withinBusinessHours,managementSecret}) {
   const uuid = value => typeof value==="string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
   const fail = (code,message) => Object.assign(new Error(message),{status:code});
   const reads = new Map();
@@ -15,6 +16,7 @@ export function registerPublicBooking({app,pool,auth,validBusinessHours,withinBu
     reads.set(key,item && item.until>now ? {...item,count:item.count+1}:{until:now+60000,count:1});
     next();
   }
+  registerPublicManagement({app,pool,limit,secret:managementSecret});
   async function salon(db,id) {
     if(!uuid(id)) throw fail(404,"Página de reservas no disponible.");
     const result=await db.query("SELECT id,name,business_hours FROM salons WHERE id=$1 AND public_booking_enabled=true FOR SHARE",[id]);
@@ -92,6 +94,8 @@ export function registerPublicBooking({app,pool,auth,validBusinessHours,withinBu
     }catch(error){res.status(error.status||500).json({error:error.status?error.message:"No se pudieron cargar los horarios."});}
   });
   app.post("/api/public/salons/:id/bookings",limit,async(req,res)=>{
+    res.set("Cache-Control","no-store");
+    if(!managementSecret)return res.status(503).json({error:"Las reservas están temporalmente no disponibles."});
     const {name,phone,email="",serviceId,professionalId=null,startsAt,date,requestId,website=""}=req.body||{};
     if(!uuid(req.params.id)||!uuid(requestId)||typeof name!=="string"||!name.trim()||name.length>120||typeof phone!=="string"||phone.replace(/\D/g,"").length<7||!/^\+?[\d ()-]{7,30}$/.test(phone)||typeof email!=="string"||email.length>254||(email&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))||website) return res.status(400).json({error:"Revisa tu nombre y teléfono; el correo es opcional."});
     const start=new Date(startsAt);
@@ -104,7 +108,8 @@ export function registerPublicBooking({app,pool,auth,validBusinessHours,withinBu
       const previous=(await db.query("SELECT payload_hash,appointment_id FROM public_booking_requests WHERE salon_id=$1 AND request_id=$2",[req.params.id,requestId])).rows[0];
       if(previous) {
         if(previous.payload_hash!==fingerprint)throw fail(409,"Esta solicitud ya se usó. Actualiza los horarios.");
-        await db.query("COMMIT");committed=true;return res.json({reference:previous.appointment_id,status:"confirmed"});
+        const receipt=await bookingReceipt(db,managementSecret,req.params.id,previous.appointment_id);
+        await db.query("COMMIT");committed=true;return res.json(receipt);
       }
       const data=await availability(db,req.params.id,serviceId,professionalId,date);
       if(!data.slots.some(slot=>slot.getTime()===start.getTime()))throw fail(409,"Ese horario ya no está disponible. Elige otro.");
@@ -117,7 +122,8 @@ export function registerPublicBooking({app,pool,auth,validBusinessHours,withinBu
       await db.query("INSERT INTO appointments(id,salon_id,client_id,service_id,professional_id,starts_at,ends_at,status,notes,price_label_snapshot) VALUES($1,$2,$3,$4,$5,$6,$7,'confirmed','Reserva en línea',$8)",[appointmentId,req.params.id,clientId,serviceId,professionalId||null,start,new Date(start.getTime()+data.service.duration_minutes*60000),data.service.price_label||""]);
       await db.query("INSERT INTO reminders(id,appointment_id,status,scheduled_at) VALUES($1,$2,CASE WHEN $3::timestamptz-INTERVAL '24 hours'<=NOW() THEN 'skipped' ELSE 'awaiting_connection' END,$3::timestamptz-INTERVAL '24 hours')",[crypto.randomUUID(),appointmentId,start]);
       await db.query("INSERT INTO public_booking_requests(salon_id,request_id,payload_hash,contact_hash,appointment_id) VALUES($1,$2,$3,$4,$5)",[req.params.id,requestId,fingerprint,contactHash,appointmentId]);
-      await db.query("COMMIT");committed=true;res.status(201).json({reference:appointmentId,status:"confirmed"});
+      const receipt=await bookingReceipt(db,managementSecret,req.params.id,appointmentId);
+      await db.query("COMMIT");committed=true;res.status(201).json(receipt);
     }catch(error){console.error("Public booking:",error.status||500);res.status(error.status||500).json({error:error.status?error.message:"No se pudo confirmar la reserva. Puedes reintentar sin duplicarla."});}
     finally{if(db){if(!committed)await db.query("ROLLBACK").catch(()=>{});db.release();}}
   });
