@@ -13,7 +13,7 @@ Primera base móvil de BellezaAI para iPhone y Android usando Expo/React Native.
 
 ## Configuración
 1. Copia `.env.example` a `.env`.
-2. Define `EXPO_PUBLIC_API_URL` con la URL HTTPS del servidor BellezaAI desplegado.
+2. La app usa por defecto `https://bellezaai-server.onrender.com`. Puedes sobrescribirlo con `EXPO_PUBLIC_API_URL` si cambias de servidor.
 3. Ejecuta `npm install`.
 4. Ejecuta `npm start`.
 
