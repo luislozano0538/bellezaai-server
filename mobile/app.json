@@ -1,0 +1,16 @@
+{
+  "expo": {
+    "name": "BellezaAI",
+    "slug": "bellezaai",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.bellezaai.app"
+    },
+    "android": {
+      "package": "com.bellezaai.app"
+    }
+  }
+}
