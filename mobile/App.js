@@ -17,6 +17,7 @@ import CreateAppointment from "./CreateAppointment";
 import AssistantScreen from "./AssistantScreen";
 import SalonManagement from "./SalonManagement";
 import EditAppointment from "./EditAppointment";
+import SalonSettings from "./SalonSettings";
 
 const TOKEN_KEY = "bellezaai_token";
 const API_URL = String(process.env.EXPO_PUBLIC_API_URL || "https://bellezaai-server.onrender.com").replace(/\/$/, "");
@@ -207,6 +208,7 @@ function Home({ token, logout, navigate }) {
         <Text style={styles.cardTitle}>Administrar salón</Text>
         <Text style={styles.muted}>Agrega servicios y profesionales desde el teléfono.</Text>
         <Button onPress={() => navigate("management")}>Servicios y equipo</Button>
+        <Button secondary onPress={() => navigate("salonSettings")}>Horario y reservas</Button>
       </View>
 
       <Button secondary onPress={logout}>Cerrar sesión</Button>
@@ -458,6 +460,7 @@ function Shell({ token, logout }) {
         {tab === "assistant" && <AssistantScreen token={token} request={api} logout={logout} />}
         {tab === "management" && <SalonManagement token={token} request={api} logout={logout} goBack={() => setTab("home")} />}
         {tab === "editAppointment" && editingAppointment && <EditAppointment token={token} request={api} logout={logout} appointment={editingAppointment} onSaved={finishEditing} onCancel={finishEditing} />}
+        {tab === "salonSettings" && <SalonSettings token={token} request={api} logout={logout} baseUrl={API_URL} goBack={() => setTab("home")} />}
       </View>
       <View style={styles.nav}>
         {[
