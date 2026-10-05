@@ -11,6 +11,9 @@
     },
     "android": {
       "package": "com.bellezaai.app"
-    }
+    },
+    "plugins": [
+      "expo-secure-store"
+    ]
   }
 }
