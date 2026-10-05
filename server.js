@@ -1287,7 +1287,7 @@ app.post("/api/messages/send", auth, (_req, res) => {
 });
 
 registerClosures({app,pool,auth,validBusinessHours});
-registerSalonProfile({app,pool,auth});
+registerSalonProfile({app,pool,auth,validBusinessHours});
 registerPublicBooking({app,pool,auth,validBusinessHours,withinBusinessHours,managementSecret:JWT_SECRET});
 
 async function start() {
