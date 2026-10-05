@@ -31,3 +31,26 @@ Después de vincular el proyecto a una cuenta de Expo/EAS:
 - Producción: `eas build --platform all --profile production`
 
 La publicación final requiere las cuentas y credenciales de Apple/Google correspondientes.
+
+
+## Vincular Expo/EAS y crear la primera build de iPhone
+
+Este repositorio no guarda credenciales de Expo ni Apple.
+
+1. Desde la carpeta `mobile/`, inicia sesión:
+   `npx eas-cli login`
+2. Comprueba la cuenta:
+   `npm run eas:whoami`
+3. Vincula BellezaAI a EAS:
+   `npm run eas:init`
+   Este paso crea el proyecto en Expo y añade `extra.eas.projectId` a `app.json`.
+4. Para una build interna de iPhone, registra el dispositivo:
+   `npm run device:ios`
+5. Lanza la build:
+   `npm run build:ios:preview`
+
+La build `preview` usa distribución interna. En iOS, el dispositivo debe estar incluido en el perfil ad hoc para instalar la app.
+
+### Automatización futura
+
+Para builds desde CI se puede usar un token de Expo llamado `EXPO_TOKEN`. Nunca debe escribirse ese token dentro del repositorio; debe guardarse como secreto de GitHub/EAS.
