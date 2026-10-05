@@ -25,7 +25,10 @@ import RemindersScreen from "./RemindersScreen";
 import StaffAccessScreen from "./StaffAccessScreen";
 
 const TOKEN_KEY = "bellezaai_token";
-const API_URL = String(process.env.EXPO_PUBLIC_API_URL || "https://bellezaai-server.onrender.com").replace(/\/$/, "");
+const APP_ENV = String(process.env.EXPO_PUBLIC_APP_ENV || "development");
+const DEFAULT_API_URL =
+  APP_ENV === "preview" ? "" : "https://bellezaai-server.onrender.com";
+const API_URL = String(process.env.EXPO_PUBLIC_API_URL || DEFAULT_API_URL).replace(/\/$/, "");
 
 async function api(path, { token, method = "GET", body } = {}) {
   if (!API_URL) throw new Error("Falta configurar EXPO_PUBLIC_API_URL.");
