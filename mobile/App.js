@@ -15,6 +15,7 @@ import * as SecureStore from "expo-secure-store";
 import CreateAppointment from "./CreateAppointment";
 import AssistantScreen from "./AssistantScreen";
 import SalonManagement from "./SalonManagement";
+import EditAppointment from "./EditAppointment";
 
 const TOKEN_KEY = "bellezaai_token";
 const API_URL = String(process.env.EXPO_PUBLIC_API_URL || "https://bellezaai-server.onrender.com").replace(/\/$/, "");
@@ -212,7 +213,7 @@ function Home({ token, logout, navigate }) {
   );
 }
 
-function Appointments({ token, logout }) {
+function Appointments({ token, logout, onEdit }) {
   const [items, setItems] = useState([]);
   const [notice, setNotice] = useState("Cargando citas…");
   const [cancelId, setCancelId] = useState("");
@@ -271,9 +272,14 @@ function Appointments({ token, logout }) {
             <Text style={styles.status}>{item.status}</Text>
 
             {futureConfirmed && !confirming && (
-              <Pressable onPress={() => setCancelId(item.id)} style={styles.smallAction}>
-                <Text style={styles.smallActionText}>Cancelar cita</Text>
-              </Pressable>
+              <View style={styles.actionRow}>
+                <Pressable onPress={() => onEdit(item)} style={styles.smallAction}>
+                  <Text style={styles.smallActionText}>Reprogramar</Text>
+                </Pressable>
+                <Pressable onPress={() => setCancelId(item.id)} style={styles.smallAction}>
+                  <Text style={styles.smallActionText}>Cancelar cita</Text>
+                </Pressable>
+              </View>
             )}
 
             {futureConfirmed && confirming && (
@@ -393,16 +399,20 @@ function Clients({ token, logout }) {
 
 function Shell({ token, logout }) {
   const [tab, setTab] = useState("home");
+  const [editingAppointment, setEditingAppointment] = useState(null);
+  function editAppointment(item) { setEditingAppointment(item); setTab("editAppointment"); }
+  function finishEditing() { setEditingAppointment(null); setTab("appointments"); }
   return (
     <SafeAreaView style={styles.flex}>
       <StatusBar barStyle="dark-content" />
       <View style={styles.flex}>
         {tab === "home" && <Home token={token} logout={logout} navigate={setTab} />}
-        {tab === "appointments" && <Appointments token={token} logout={logout} />}
+        {tab === "appointments" && <Appointments token={token} logout={logout} onEdit={editAppointment} />}
         {tab === "clients" && <Clients token={token} logout={logout} />}
         {tab === "create" && <CreateAppointment token={token} request={api} logout={logout} onCreated={() => setTab("appointments")} />}
         {tab === "assistant" && <AssistantScreen token={token} request={api} logout={logout} />}
         {tab === "management" && <SalonManagement token={token} request={api} logout={logout} goBack={() => setTab("home")} />}
+        {tab === "editAppointment" && editingAppointment && <EditAppointment token={token} request={api} logout={logout} appointment={editingAppointment} onSaved={finishEditing} onCancel={finishEditing} />}
       </View>
       <View style={styles.nav}>
         {[
@@ -507,6 +517,7 @@ const styles = StyleSheet.create({
   navActive: { color: "#74407d" },
   smallAction: { alignSelf: "flex-start", borderWidth: 1, borderColor: "#74407d", borderRadius: 12, paddingVertical: 9, paddingHorizontal: 12, marginTop: 6 },
   smallActionText: { color: "#74407d", fontWeight: "800" },
+  actionRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 6 },
   confirmBox: { gap: 8, paddingTop: 6 },
   dangerAction: { alignSelf: "flex-start", backgroundColor: "#a02d43", borderRadius: 12, paddingVertical: 10, paddingHorizontal: 13 },
   dangerActionText: { color: "white", fontWeight: "800" }
