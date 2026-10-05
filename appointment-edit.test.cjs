@@ -24,12 +24,15 @@ function setup({exists = true, conflict = false, failReminder = false, cancelled
   };
   vm.runInNewContext(source.slice(start, end), {
     app: {patch(path, middleware, fn) {assert.equal(middleware, auth); handler = fn;}},
-    auth, pool: {async connect() {return db;}}, crypto: require('node:crypto'), console: {error() {}}
+    auth, pool: {async connect() {return db;}}, crypto: require('node:crypto'), console: {error() {}},
+    scopedProfessionalId: () => null,
+    appointmentIsClosed: async () => false,
+    professionalWorks: async () => true
   });
   const res = {code: 200, status(n) {this.code=n; return this;}, json(body) {this.body=body;}};
   return {handler, res, calls, released: () => released};
 }
-const req = body => ({params: {id}, user: {salonId: 'salon-A'}, body});
+const req = body => ({params: {id}, user: {id:'owner-user',role:'owner',salonId: 'salon-A'}, body});
 const edit = {clientId: 'client', serviceId: 'service', startsAt: '2099-09-30T15:30:00Z'};
 test('reschedule updates duration and replaces unsent reminder in one transaction', async () => {
   const t = setup();

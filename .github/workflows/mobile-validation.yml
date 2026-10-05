@@ -1,0 +1,58 @@
+name: Mobile validation
+
+on:
+  push:
+    branches:
+      - mobile-app-foundation
+    paths:
+      - "mobile/**"
+      - "server.js"
+      - "staff-access.js"
+      - "*.test.cjs"
+      - "package.json"
+      - ".github/workflows/mobile-validation.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "mobile/**"
+      - "server.js"
+      - "staff-access.js"
+      - "*.test.cjs"
+      - "package.json"
+      - ".github/workflows/mobile-validation.yml"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.13.1"
+          cache: npm
+          cache-dependency-path: mobile/package.json
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Backend syntax
+        run: |
+          node --check ../server.js
+          node --check ../staff-access.js
+
+      - name: Backend tests
+        working-directory: .
+        run: npm test
+
+      - name: Expo Doctor
+        run: npx expo-doctor
+
+      - name: Bundle iOS and Android
+        run: npx expo export --platform all --output-dir dist

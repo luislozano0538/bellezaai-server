@@ -5,17 +5,18 @@ const source=fs.readFileSync(__dirname+'/server.js','utf8');
 const route=source.slice(source.indexOf('app.patch("/api/clients/:id"'),source.indexOf('app.get("/api/services"'));
 async function run(body,rows=[]){
  let handler,queries=[];
- vm.runInNewContext(route,{app:{patch:(p,a,f)=>handler=f},auth(){},console,pool:{query:async(sql,params)=>{queries.push({sql,params});return {rows};}}});
+ vm.runInNewContext(route,{app:{patch:(p,a,f)=>handler=f},auth(){},console,
+ scopedProfessionalId:()=>null,pool:{query:async(sql,params)=>{queries.push({sql,params});return {rows};}}});
  const res={code:200,status(c){this.code=c;return this;},json(v){this.value=v;}};
- await handler({body,params:{id:'11111111-1111-1111-1111-111111111111'},user:{salonId:'salon-a'}},res);
+ await handler({body,params:{id:'11111111-1111-1111-1111-111111111111'},user:{id:'owner-user',role:'owner',salonId:'salon-a'}},res);
  return {res,queries};
 }
 test('client edits are scoped to salon and preserve notes and appointments',async()=>{
  const {res,queries}=await run({name:' Luis ',phone:' 123 ',email:'luis@example.com'},[{id:'client',notes:'keep'}]);
  assert.equal(res.code,200);assert.equal(queries.length,1);
- assert.match(queries[0].sql,/WHERE id=\$1 AND salon_id=\$2/);
- assert.doesNotMatch(queries[0].sql,/appointments/);
- assert.match(queries[0].sql,/notes=COALESCE\(\$6,notes\)/);
+ assert.match(queries[0].sql,/WHERE c\.id=\$1 AND c\.salon_id=\$2/);
+ assert.match(queries[0].sql,/\$7::uuid IS NULL OR/);
+ assert.match(queries[0].sql,/notes=COALESCE\(\$6,c\.notes\)/);
  assert.equal(queries[0].params[5],null);
  assert.equal(queries[0].params[1],'salon-a');assert.equal(queries[0].params[2],'Luis');
  assert.equal(res.value.notes,'keep');

@@ -9,9 +9,10 @@ test('creation snapshots selected service price alongside appointment and remind
  if(sql.includes('INSERT INTO appointments')){write={sql,params};return {rows:[{id:'a'}]};}
  return {rows:[]};
  }};
- vm.runInNewContext(source.slice(start,end),{app:{post:(p,a,f)=>handler=f},auth(){},pool:{connect:async()=>db},crypto:require('node:crypto'),console});
+ vm.runInNewContext(source.slice(start,end),{app:{post:(p,a,f)=>handler=f},auth(){},pool:{connect:async()=>db},crypto:require('node:crypto'),console,
+ scopedProfessionalId:()=>null,appointmentIsClosed:async()=>false,professionalWorks:async()=>true});
  const res={code:200,status(c){this.code=c;return this;},json(){}};
- await handler({user:{salonId:'mine'},body:{clientId:'c',serviceId:'s',startsAt:'2099-10-01T14:00Z'}},res);
+ await handler({user:{id:'owner-user',role:'owner',salonId:'mine'},body:{clientId:'c',serviceId:'s',startsAt:'2099-10-01T14:00Z'}},res);
  assert.equal(res.code,201);assert.equal(write.params[9],'600');
  assert.match(write.sql,/notes, price_label_snapshot/);
 });

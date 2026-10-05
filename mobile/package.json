@@ -1,0 +1,26 @@
+{
+  "name": "bellezaai-mobile",
+  "version": "0.1.0",
+  "private": true,
+  "main": "node_modules/expo/AppEntry.js",
+  "scripts": {
+    "start": "expo start",
+    "ios": "expo start --ios",
+    "android": "expo start --android",
+    "check": "npx expo-doctor",
+    "eas:whoami": "npx eas-cli whoami",
+    "eas:init": "npx eas-cli init",
+    "device:ios": "npx eas-cli device:create",
+    "build:ios:preview": "npx eas-cli build --platform ios --profile preview",
+    "build:ios:production": "npx eas-cli build --platform ios --profile production"
+  },
+  "dependencies": {
+    "expo": "~57.0.23",
+    "expo-secure-store": "~57.0.4",
+    "react": "19.2.3",
+    "react-native": "0.86.3",
+    "@react-native-community/datetimepicker": "9.1.0",
+    "expo-image-picker": "~57.0.20",
+    "expo-image-manipulator": "~57.0.17"
+  }
+}
