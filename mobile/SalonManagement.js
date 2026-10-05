@@ -23,10 +23,12 @@ export default function SalonManagement({ token, request, logout, goBack }) {
   const [notice, setNotice] = useState("Cargando configuración…");
   const [busy, setBusy] = useState(false);
 
+  const [editingServiceId, setEditingServiceId] = useState("");
   const [serviceName, setServiceName] = useState("");
   const [serviceDuration, setServiceDuration] = useState("60");
   const [servicePrice, setServicePrice] = useState("");
 
+  const [editingPersonId, setEditingPersonId] = useState("");
   const [personName, setPersonName] = useState("");
   const [personPhone, setPersonPhone] = useState("");
   const [personEmail, setPersonEmail] = useState("");
@@ -50,29 +52,51 @@ export default function SalonManagement({ token, request, logout, goBack }) {
 
   useEffect(() => { load("Cargando configuración…"); }, []);
 
-  async function addService() {
+  function resetServiceForm() {
+    setEditingServiceId("");
+    setServiceName("");
+    setServiceDuration("60");
+    setServicePrice("");
+  }
+
+  function editService(service) {
+    if (!service.active || busy) return;
+    setEditingServiceId(service.id);
+    setServiceName(service.name || "");
+    setServiceDuration(String(service.duration_minutes || 60));
+    setServicePrice(service.price_label || "");
+    setNotice("Editando " + service.name + ".");
+  }
+
+  async function saveService() {
+    if (busy) return;
     const duration = Number(serviceDuration);
     if (!serviceName.trim() || !Number.isInteger(duration) || duration < 1 || duration > 1440) {
       setNotice("Revisa el nombre y la duración del servicio.");
       return;
     }
+
     setBusy(true);
-    setNotice("Guardando servicio…");
+    setNotice(editingServiceId ? "Actualizando servicio…" : "Guardando servicio…");
     try {
-      await request("/api/services", {
-        token,
-        method: "POST",
-        body: {
-          name: serviceName.trim(),
-          duration_minutes: duration,
-          price_label: servicePrice.trim()
+      await request(
+        editingServiceId
+          ? "/api/services/" + encodeURIComponent(editingServiceId)
+          : "/api/services",
+        {
+          token,
+          method: editingServiceId ? "PATCH" : "POST",
+          body: {
+            name: serviceName.trim(),
+            duration_minutes: duration,
+            price_label: servicePrice.trim()
+          }
         }
-      });
-      setServiceName("");
-      setServiceDuration("60");
-      setServicePrice("");
+      );
+      const edited = !!editingServiceId;
+      resetServiceForm();
       await load("Actualizando servicios…");
-      setNotice("Servicio guardado.");
+      setNotice(edited ? "Servicio actualizado." : "Servicio guardado.");
     } catch (error) {
       if (error.status === 401) return logout();
       setNotice(error.message);
@@ -91,6 +115,7 @@ export default function SalonManagement({ token, request, logout, goBack }) {
         method: "PATCH",
         body: { active: !service.active }
       });
+      if (editingServiceId === service.id) resetServiceForm();
       await load();
     } catch (error) {
       if (error.status === 401) return logout();
@@ -100,35 +125,65 @@ export default function SalonManagement({ token, request, logout, goBack }) {
     }
   }
 
-  async function addPerson() {
+  function resetPersonForm() {
+    setEditingPersonId("");
+    setPersonName("");
+    setPersonPhone("");
+    setPersonEmail("");
+    setPersonSpecialties("");
+  }
+
+  function editPerson(person) {
+    if (busy) return;
+    setEditingPersonId(person.id);
+    setPersonName(person.name || "");
+    setPersonPhone(person.phone || "");
+    setPersonEmail(person.email || "");
+    setPersonSpecialties((person.specialties || []).join(", "));
+    setNotice("Editando " + person.name + ".");
+  }
+
+  async function savePerson() {
+    if (busy) return;
     if (!personName.trim()) {
       setNotice("Escribe el nombre del profesional.");
       return;
     }
+
     const specialties = personSpecialties
       .split(",")
       .map(value => value.trim())
       .filter(Boolean);
 
     setBusy(true);
-    setNotice("Guardando profesional…");
+    setNotice(editingPersonId ? "Actualizando profesional…" : "Guardando profesional…");
     try {
-      await request("/api/professionals", {
-        token,
-        method: "POST",
-        body: {
-          name: personName.trim(),
-          phone: personPhone.trim(),
-          email: personEmail.trim(),
-          specialties
+      await request(
+        editingPersonId
+          ? "/api/professionals/" + encodeURIComponent(editingPersonId)
+          : "/api/professionals",
+        {
+          token,
+          method: editingPersonId ? "PATCH" : "POST",
+          body: editingPersonId
+            ? {
+                name: personName.trim(),
+                phone: personPhone.trim(),
+                email: personEmail.trim()
+              }
+            : {
+                name: personName.trim(),
+                phone: personPhone.trim(),
+                email: personEmail.trim(),
+                specialties
+              }
         }
-      });
-      setPersonName("");
-      setPersonPhone("");
-      setPersonEmail("");
-      setPersonSpecialties("");
+      );
+
+      const edited = !!editingPersonId;
+      resetPersonForm();
       await load("Actualizando equipo…");
-      setNotice("Profesional guardado.");
+      setNotice(edited ? "Profesional actualizado." : "Profesional guardado.");
     } catch (error) {
       if (error.status === 401) return logout();
       setNotice(error.message);
@@ -150,12 +205,23 @@ export default function SalonManagement({ token, request, logout, goBack }) {
       {!!notice && <Text style={styles.notice}>{notice}</Text>}
 
       <View style={styles.card}>
-        <Text style={styles.sectionTitle}>Nuevo servicio</Text>
+        <View style={styles.formHeader}>
+          <Text style={styles.sectionTitle}>
+            {editingServiceId ? "Editar servicio" : "Nuevo servicio"}
+          </Text>
+          {!!editingServiceId && (
+            <Pressable disabled={busy} onPress={resetServiceForm}>
+              <Text style={styles.link}>Cancelar edición</Text>
+            </Pressable>
+          )}
+        </View>
         <Field label="Nombre" value={serviceName} onChangeText={setServiceName} maxLength={120} placeholder="Ej. Cambio de color" />
         <Field label="Duración en minutos" value={serviceDuration} onChangeText={setServiceDuration} keyboardType="number-pad" placeholder="60" />
         <Field label="Precio mostrado" value={servicePrice} onChangeText={setServicePrice} maxLength={100} placeholder="Ej. $85 o Desde $85" />
-        <Pressable disabled={busy} onPress={addService} style={[styles.primary, busy && styles.disabled]}>
-          <Text style={styles.primaryText}>Guardar servicio</Text>
+        <Pressable disabled={busy} onPress={saveService} style={[styles.primary, busy && styles.disabled]}>
+          <Text style={styles.primaryText}>
+            {editingServiceId ? "Guardar cambios" : "Guardar servicio"}
+          </Text>
         </Pressable>
       </View>
 
@@ -172,23 +238,49 @@ export default function SalonManagement({ token, request, logout, goBack }) {
                 {service.active ? "Activo" : "Archivado"}
               </Text>
             </View>
-            <Pressable disabled={busy} onPress={() => toggleService(service)} style={styles.secondary}>
-              <Text style={styles.secondaryText}>{service.active ? "Archivar" : "Activar"}</Text>
-            </Pressable>
+            <View style={styles.actions}>
+              {service.active && (
+                <Pressable disabled={busy} onPress={() => editService(service)} style={styles.secondary}>
+                  <Text style={styles.secondaryText}>Editar</Text>
+                </Pressable>
+              )}
+              <Pressable disabled={busy} onPress={() => toggleService(service)} style={styles.secondary}>
+                <Text style={styles.secondaryText}>{service.active ? "Archivar" : "Activar"}</Text>
+              </Pressable>
+            </View>
           </View>
         ))}
         {!services.length && !notice && <Text style={styles.muted}>No hay servicios.</Text>}
       </View>
 
       <View style={styles.card}>
-        <Text style={styles.sectionTitle}>Nuevo profesional</Text>
+        <View style={styles.formHeader}>
+          <Text style={styles.sectionTitle}>
+            {editingPersonId ? "Editar profesional" : "Nuevo profesional"}
+          </Text>
+          {!!editingPersonId && (
+            <Pressable disabled={busy} onPress={resetPersonForm}>
+              <Text style={styles.link}>Cancelar edición</Text>
+            </Pressable>
+          )}
+        </View>
         <Field label="Nombre" value={personName} onChangeText={setPersonName} maxLength={120} placeholder="Nombre" />
         <Field label="Teléfono" value={personPhone} onChangeText={setPersonPhone} maxLength={60} keyboardType="phone-pad" placeholder="Teléfono" />
         <Field label="Correo" value={personEmail} onChangeText={setPersonEmail} maxLength={254} autoCapitalize="none" keyboardType="email-address" placeholder="Correo opcional" />
-        <Field label="Especialidades" value={personSpecialties} onChangeText={setPersonSpecialties} maxLength={300} placeholder="Uñas, color, pestañas" />
-        <Text style={styles.muted}>Separa las especialidades con comas.</Text>
-        <Pressable disabled={busy} onPress={addPerson} style={[styles.primary, busy && styles.disabled]}>
-          <Text style={styles.primaryText}>Guardar profesional</Text>
+        {!editingPersonId ? (
+          <>
+            <Field label="Especialidades" value={personSpecialties} onChangeText={setPersonSpecialties} maxLength={300} placeholder="Uñas, color, pestañas" />
+            <Text style={styles.muted}>Separa las especialidades con comas.</Text>
+          </>
+        ) : (
+          <Text style={styles.muted}>
+            Las especialidades actuales se conservan. Esta edición cambia nombre, teléfono y correo.
+          </Text>
+        )}
+        <Pressable disabled={busy} onPress={savePerson} style={[styles.primary, busy && styles.disabled]}>
+          <Text style={styles.primaryText}>
+            {editingPersonId ? "Guardar cambios" : "Guardar profesional"}
+          </Text>
         </Pressable>
       </View>
 
@@ -204,6 +296,9 @@ export default function SalonManagement({ token, request, logout, goBack }) {
                 <Text style={styles.muted}>{person.specialties.join(" · ")}</Text>
               )}
             </View>
+            <Pressable disabled={busy} onPress={() => editPerson(person)} style={styles.secondary}>
+              <Text style={styles.secondaryText}>Editar</Text>
+            </Pressable>
           </View>
         ))}
         {!team.length && !notice && <Text style={styles.muted}>Todavía no hay profesionales.</Text>}
@@ -220,6 +315,7 @@ const styles = StyleSheet.create({
   link: { color: "#74407d", fontWeight: "800", paddingVertical: 4 },
   notice: { color: "#8a3048", lineHeight: 20 },
   card: { backgroundColor: "white", borderWidth: 1, borderColor: "#eadfea", borderRadius: 20, padding: 16, gap: 10 },
+  formHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 10 },
   sectionTitle: { fontSize: 20, fontWeight: "800", color: "#2d2030" },
   field: { gap: 5 },
   label: { fontWeight: "700", color: "#3f3143" },
@@ -230,6 +326,7 @@ const styles = StyleSheet.create({
   secondaryText: { color: "#74407d", fontWeight: "800" },
   item: { flexDirection: "row", gap: 12, alignItems: "center", borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#e5dce5", paddingTop: 12 },
   grow: { flex: 1 },
+  actions: { gap: 7, alignItems: "stretch" },
   itemTitle: { fontWeight: "800", color: "#2d2030", fontSize: 16 },
   muted: { color: "#756779", lineHeight: 20 },
   active: { color: "#3c6b4f", fontWeight: "700", marginTop: 3 },
