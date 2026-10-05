@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><meta name="robots" content="noindex,nofollow"><title>Mi reserva · BellezaAI</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f8f4f8;color:#2b2030;font-family:system-ui,sans-serif}main{max-width:640px;margin:40px auto;padding:20px}.card{background:white;border:1px solid #eadfea;border-radius:22px;padding:24px}h1{color:#703e7b}p{line-height:1.6}button,a{font:inherit}button{padding:13px 18px;border:1px solid #703e7b;border-radius:12px;color:#703e7b;background:white;cursor:pointer;margin:6px 6px 6px 0}button:disabled{opacity:.5;cursor:default}.danger{background:#a02d43;color:white;border-color:#a02d43}#details{white-space:pre-line}#confirmCancel{background:#fff1f3;border-radius:12px;padding:18px;margin-top:18px}a{color:#703e7b}.muted{color:#67586c;font-size:14px}
+</style></head><body><main><h1>Mi reserva</h1><div class="card"><p id="notice" role="status">Consultando tu reserva…</p><section id="booking" hidden><h2 id="status"></h2><p id="details"></p><p id="reference" class="muted"></p><button id="refresh" type="button">Actualizar datos</button><button id="cancel" type="button">Cancelar cita</button><section id="confirmCancel" hidden aria-labelledby="cancelTitle"><h3 id="cancelTitle">¿Quieres cancelar esta cita?</h3><p>Se liberará este horario. Si luego quieres asistir, tendrás que hacer otra reserva.</p><button id="keep" type="button">Conservar mi cita</button><button id="confirm" type="button" class="danger">Sí, cancelar mi cita</button></section><p id="help" class="muted"></p><p><a id="bookAgain">Reservar otra cita</a></p></section><p class="muted">Este enlace es privado y permite gestionar tu cita. Consérvalo y no lo compartas. Para otros cambios, contacta con el salón.</p></div></main>
+<script>
+(()=>{
+ const $=id=>document.getElementById(id),parts=location.pathname.split('/').filter(Boolean),salon=parts[1],appointment=parts[2];
+ const storageKey='bellezaManage:'+salon+':'+appointment;let token=location.hash.slice(1),current=null,busy=false;
+ if(token){try{sessionStorage.setItem(storageKey,token);}catch{}history.replaceState(null,'',location.pathname);}
+ else{try{token=sessionStorage.getItem(storageKey)||'';}catch{}}
+ const base='/api/public/salons/'+encodeURIComponent(salon)+'/bookings/'+encodeURIComponent(appointment);
+ $('bookAgain').href='/reservar/'+encodeURIComponent(salon);
+ function render(data){
+  current=data;$('booking').hidden=false;$('confirmCancel').hidden=true;
+  const labels={confirmed:'Cita confirmada',cancelled:'Cita cancelada',completed:'Cita completada',no_show:'Cita marcada como no asistida'};
+  $('status').textContent=labels[data.status]||'Estado de tu cita';
+  const date=new Intl.DateTimeFormat('es',{timeZone:data.timezone,dateStyle:'full',timeStyle:'short'}).format(new Date(data.startsAt));
+  $('details').textContent=data.salonName+'\n'+data.serviceName+' · '+Math.round((new Date(data.endsAt)-new Date(data.startsAt))/60000)+' minutos\n'+(data.price||'Consultar precio')+'\n'+data.professionalName+'\n'+date+'\nZona horaria: '+data.timezone;
+  $('reference').textContent='Referencia: '+data.reference;$('cancel').hidden=!data.canCancel;
+  $('help').textContent=data.status==='cancelled'?'La cita está cancelada. Si la guardaste en tu calendario, elimínala también allí.':data.canCancel?'Puedes cancelar en línea antes de la hora de inicio.':'Para consultar o modificar esta cita, contacta con el salón.';
+ }
+ async function request(action){
+  if(busy)return;busy=true;document.querySelectorAll('button').forEach(b=>b.disabled=true);$('notice').textContent=action==='cancel'?'Cancelando cita…':'Actualizando datos…';
+  try{
+   const response=await fetch(base+'/'+action,{method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',body:JSON.stringify({token,expectedStartsAt:current?.startsAt})});
+   const data=await response.json();if(!response.ok)throw new Error(data.error||'No se pudo completar la solicitud.');
+   render(data);$('notice').textContent=action==='cancel'?'Cancelación confirmada.':'Datos actualizados.';
+  }catch(error){$('confirmCancel').hidden=true;$('notice').textContent=error.message;if(action==='cancel'){$('cancel').hidden=true;$('help').textContent='Pulsa Actualizar datos para consultar el estado antes de volver a intentarlo.';}}
+  finally{busy=false;document.querySelectorAll('button').forEach(b=>b.disabled=false);}
+ }
+ $('refresh').onclick=()=>request('manage');
+ $('cancel').onclick=()=>{if(busy||!current?.canCancel)return;$('confirmCancel').hidden=false;$('keep').focus();};
+ $('keep').onclick=()=>{$('confirmCancel').hidden=true;$('cancel').focus();};
+ $('confirm').onclick=()=>request('cancel');
+ if(!/^[A-Za-z0-9_-]{43}$/.test(token))$('notice').textContent='Abre el enlace privado completo que recibiste al confirmar la reserva.';
+ else request('manage');
+})();
+</script></body></html>
