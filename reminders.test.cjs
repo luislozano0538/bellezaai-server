@@ -47,7 +47,7 @@ test('conflicting appointments do not create reminders', async () => {
     if (sql.includes('FROM services')) return {rows: [{duration_minutes: 45}]};
     return {rows: [{id: 'existing'}]};
   });
-  await t.handler({user: {id:'owner-user',role:'owner',salonId: 'A'}, body: {clientId: 'c', serviceId: 's', startsAt: '2026-10-01T10:00:00Z'}}, t.res);
+  await t.handler({user: {id:'owner-user',role:'owner',salonId: 'A'}, body: {clientId: 'c', serviceId: 's', startsAt: '2026-11-03T10:00:00Z'}}, t.res);
   assert.equal(t.res.code, 409);
 });
 test('failed atomic write never reports success', async () => {
@@ -57,7 +57,7 @@ test('failed atomic write never reports success', async () => {
     if (sql.includes('LIMIT 1')) return {rows: []};
     throw Error('write failed');
   });
-  await t.handler({user: {id:'owner-user',role:'owner',salonId: 'A'}, body: {clientId: 'c', serviceId: 's', startsAt: '2026-10-01T10:00:00Z'}}, t.res);
+  await t.handler({user: {id:'owner-user',role:'owner',salonId: 'A'}, body: {clientId: 'c', serviceId: 's', startsAt: '2026-11-03T10:00:00Z'}}, t.res);
   assert.equal(t.res.code, 500);
 });
 test('reminder list uses authenticated salon and excludes cancelled or past appointments', async () => {
