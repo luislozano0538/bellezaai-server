@@ -31,7 +31,10 @@ export function registerPublicBooking({app,pool,auth,validBusinessHours,withinBu
     if(!service || !Number.isInteger(service.duration_minutes) || service.duration_minutes<1 || service.duration_minutes>1440) throw fail(400,"Servicio no disponible.");
     const team=(await db.query("SELECT id,weekly_hours FROM professionals WHERE salon_id=$1 AND active=true AND ($2::uuid IS NULL OR id=$2) FOR SHARE",[id,professionalId||null])).rows;
     if(professionalId && !team.length)throw fail(400,"Profesional no disponible.");
+    const closures=(await db.query("SELECT professional_id FROM salon_closures WHERE salon_id=$1 AND active=true AND starts_on<=$2::date AND ends_on>=$2::date",[id,date])).rows;
+    if(closures.some(closure=>closure.professional_id===null))return {shop,service,slots:[]};
     const works=(member,start,end)=>{
+      if(closures.some(closure=>closure.professional_id===member.id))return false;
       if(member.weekly_hours===null)return true;
       const hours={timezone:shop.business_hours.timezone,days:member.weekly_hours};
       return validBusinessHours(hours)&&withinBusinessHours(hours,start,end);
