@@ -14,6 +14,7 @@ import {
 import * as SecureStore from "expo-secure-store";
 import CreateAppointment from "./CreateAppointment";
 import AssistantScreen from "./AssistantScreen";
+import SalonManagement from "./SalonManagement";
 
 const TOKEN_KEY = "bellezaai_token";
 const API_URL = String(process.env.EXPO_PUBLIC_API_URL || "https://bellezaai-server.onrender.com").replace(/\/$/, "");
@@ -134,7 +135,7 @@ function Metric({ value, label }) {
   );
 }
 
-function Home({ token, logout }) {
+function Home({ token, logout, navigate }) {
   const [data, setData] = useState(null);
   const [appointments, setAppointments] = useState([]);
   const [notice, setNotice] = useState("Cargando…");
@@ -198,6 +199,12 @@ function Home({ token, logout }) {
             </View>
           </View>
         )) : <Text style={styles.muted}>No hay próximas citas.</Text>}
+      </View>
+
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Administrar salón</Text>
+        <Text style={styles.muted}>Agrega servicios y profesionales desde el teléfono.</Text>
+        <Button onPress={() => navigate("management")}>Servicios y equipo</Button>
       </View>
 
       <Button secondary onPress={logout}>Cerrar sesión</Button>
@@ -390,11 +397,12 @@ function Shell({ token, logout }) {
     <SafeAreaView style={styles.flex}>
       <StatusBar barStyle="dark-content" />
       <View style={styles.flex}>
-        {tab === "home" && <Home token={token} logout={logout} />}
+        {tab === "home" && <Home token={token} logout={logout} navigate={setTab} />}
         {tab === "appointments" && <Appointments token={token} logout={logout} />}
         {tab === "clients" && <Clients token={token} logout={logout} />}
         {tab === "create" && <CreateAppointment token={token} request={api} logout={logout} onCreated={() => setTab("appointments")} />}
         {tab === "assistant" && <AssistantScreen token={token} request={api} logout={logout} />}
+        {tab === "management" && <SalonManagement token={token} request={api} logout={logout} goBack={() => setTab("home")} />}
       </View>
       <View style={styles.nav}>
         {[
