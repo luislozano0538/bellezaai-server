@@ -33,10 +33,10 @@ export function registerPublicBooking({app,pool,auth,validBusinessHours,withinBu
     if(!service || !Number.isInteger(service.duration_minutes) || service.duration_minutes<1 || service.duration_minutes>1440) throw fail(400,"Servicio no disponible.");
     const team=(await db.query("SELECT id,weekly_hours FROM professionals WHERE salon_id=$1 AND active=true AND ($2::uuid IS NULL OR id=$2) FOR SHARE",[id,professionalId||null])).rows;
     if(professionalId && !team.length)throw fail(400,"Profesional no disponible.");
-    const closures=(await db.query("SELECT professional_id FROM salon_closures WHERE salon_id=$1 AND active=true AND starts_on<=$2::date AND ends_on>=$2::date",[id,date])).rows;
-    if(closures.some(closure=>closure.professional_id===null))return {shop,service,slots:[]};
+    const closures=(await db.query("SELECT professional_id,((starts_on::timestamp+COALESCE(starts_minute,0)*INTERVAL '1 minute') AT TIME ZONE $3) AS starts_at,((ends_on::timestamp+COALESCE(ends_minute,1440)*INTERVAL '1 minute') AT TIME ZONE $3) AS ends_at FROM salon_closures WHERE salon_id=$1 AND active=true AND starts_on<=$2::date AND ends_on>=$2::date",[id,date,shop.business_hours.timezone])).rows;
+    const blocked=(professional,start,end)=>closures.some(closure=>(closure.professional_id===null||closure.professional_id===professional)&&start<new Date(closure.ends_at)&&end>new Date(closure.starts_at));
     const works=(member,start,end)=>{
-      if(closures.some(closure=>closure.professional_id===member.id))return false;
+      if(blocked(member.id,start,end))return false;
       if(member.weekly_hours===null)return true;
       const hours={timezone:shop.business_hours.timezone,days:member.weekly_hours};
       return validBusinessHours(hours)&&withinBusinessHours(hours,start,end);
@@ -53,7 +53,7 @@ export function registerPublicBooking({app,pool,auth,validBusinessHours,withinBu
         AND a.status<>'cancelled' AND a.starts_at < slot + $5 * INTERVAL '1 minute' AND a.ends_at>slot
         AND ($7::uuid IS NULL OR a.professional_id=$7 OR a.professional_id IS NULL))
       ORDER BY slot`,[date,day.start,day.end,shop.business_hours.timezone,service.duration_minutes,id,professionalId||null]);
-    return {shop,service,slots:rows.rows.map(row=>new Date(row.starts_at)).filter(start=>withinBusinessHours(shop.business_hours,start,new Date(start.getTime()+service.duration_minutes*60000)) && (!team.length || team.some(member=>works(member,start,new Date(start.getTime()+service.duration_minutes*60000)))))};
+    return {shop,service,slots:rows.rows.map(row=>new Date(row.starts_at)).filter(start=>!blocked(null,start,new Date(start.getTime()+service.duration_minutes*60000)) && withinBusinessHours(shop.business_hours,start,new Date(start.getTime()+service.duration_minutes*60000)) && (!team.length || team.some(member=>works(member,start,new Date(start.getTime()+service.duration_minutes*60000)))))};
   }
   app.get("/reservar/:id",(_req,res)=>res.sendFile("booking.html",{root:process.cwd()}));
   app.get("/api/salon/public-booking",auth,async(req,res)=>{

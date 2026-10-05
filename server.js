@@ -123,6 +123,8 @@ async function initDatabase() {
       active BOOLEAN NOT NULL DEFAULT true,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+    ALTER TABLE salon_closures ADD COLUMN IF NOT EXISTS starts_minute INTEGER;
+    ALTER TABLE salon_closures ADD COLUMN IF NOT EXISTS ends_minute INTEGER;
     CREATE INDEX IF NOT EXISTS idx_closures_salon_dates ON salon_closures(salon_id,starts_on,ends_on) WHERE active=true;
 
     CREATE TABLE IF NOT EXISTS public_booking_requests (
@@ -841,7 +843,7 @@ app.post("/api/appointments", auth, async (req, res) => {
       start.getTime() + service.rows[0].duration_minutes * 60000
     );
 
-    if(await appointmentIsClosed(db,req.user.salonId,professionalId,start,end))return res.status(409).json({error:"La fecha está bloqueada por un cierre o día libre. Elige otra fecha."});
+    if(await appointmentIsClosed(db,req.user.salonId,professionalId,start,end))return res.status(409).json({error:"Ese horario coincide con un cierre, descanso o día libre. Elige otra hora o fecha."});
     if (!await professionalWorks(db,req.user.salonId,professionalId,start,end)) {
       return res.status(409).json({error:"La cita queda fuera del horario de trabajo del profesional. Elige otra hora o profesional."});
     }
@@ -983,7 +985,7 @@ app.patch("/api/appointments/:id", auth, async (req, res) => {
         return res.status(404).json({ error: "Cliente o servicio no encontrado en tu salón." });
       }
       const end = new Date(start.getTime() + service.rows[0].duration_minutes * 60000);
-      if(await appointmentIsClosed(db,req.user.salonId,professionalId,start,end))return res.status(409).json({error:"La fecha está bloqueada por un cierre o día libre. Elige otra fecha."});
+      if(await appointmentIsClosed(db,req.user.salonId,professionalId,start,end))return res.status(409).json({error:"Ese horario coincide con un cierre, descanso o día libre. Elige otra hora o fecha."});
       if (!await professionalWorks(db,req.user.salonId,professionalId,start,end)) return res.status(409).json({error:"La cita queda fuera del horario de trabajo del profesional. Elige otra hora o profesional."});
       const conflict = await db.query(
         `SELECT id FROM appointments
