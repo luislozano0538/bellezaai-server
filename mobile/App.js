@@ -152,13 +152,14 @@ function Home({ token, logout, navigate }) {
     setBusy(true);
     setNotice("Actualizando…");
     try {
-      const [dashboard, profile, salon, appts] = await Promise.all([
+      const [dashboard, profile, salon, appts, setup] = await Promise.all([
         api("/api/dashboard", { token }),
         api("/api/profile", { token }),
         api("/api/salon", { token }),
-        api("/api/appointments", { token })
+        api("/api/appointments", { token }),
+        api("/api/salon/setup", { token })
       ]);
-      setData({ dashboard, profile, salon });
+      setData({ dashboard, profile, salon, setup });
       setAppointments(appts);
       setNotice("");
     } catch (error) {
@@ -192,6 +193,49 @@ function Home({ token, logout, navigate }) {
         <Metric value={data?.dashboard?.appointments ?? "—"} label="Citas" />
         <Metric value={data?.dashboard?.clients ?? "—"} label="Clientes" />
         <Metric value={data?.dashboard?.pendingReminders ?? "—"} label="Recordatorios" />
+      </View>
+
+      <View style={styles.card}>
+        <View style={styles.setupHeader}>
+          <View style={styles.rowGrow}>
+            <Text style={styles.cardTitle}>Preparar mi salón</Text>
+            <Text style={styles.muted}>
+              {data?.setup?.ready
+                ? "Configuración principal lista."
+                : "Completa lo necesario antes de publicar reservas."}
+            </Text>
+          </View>
+          <Text style={[styles.setupBadge, data?.setup?.ready && styles.setupBadgeReady]}>
+            {data?.setup?.ready ? "Listo" : "Pendiente"}
+          </Text>
+        </View>
+
+        {(data?.setup?.items || []).map(item => {
+          const route =
+            item.id === "services" || item.id === "team"
+              ? "management"
+              : item.id === "description" || item.id === "address" || item.id === "phone" || item.id === "photos"
+                ? "publicProfile"
+                : "salonSettings";
+          return (
+            <Pressable
+              key={item.id}
+              onPress={() => navigate(route)}
+              style={styles.setupItem}
+            >
+              <Text style={[styles.setupMark, item.complete && styles.setupMarkDone]}>
+                {item.complete ? "✓" : "○"}
+              </Text>
+              <View style={styles.rowGrow}>
+                <Text style={styles.setupTitle}>
+                  {item.label}{item.required ? "" : " · opcional"}
+                </Text>
+                <Text style={styles.muted}>{item.detail}</Text>
+              </View>
+              <Text style={styles.link}>{item.complete ? "Ver" : "Configurar"}</Text>
+            </Pressable>
+          );
+        })}
       </View>
 
       <View style={styles.card}>
@@ -567,6 +611,13 @@ const styles = StyleSheet.create({
   },
   metricValue: { fontSize: 26, fontWeight: "800", color: "#74407d" },
   metricLabel: { fontSize: 12, color: "#756779", marginTop: 4 },
+  setupHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 10 },
+  setupBadge: { color: "#8a3048", fontWeight: "800", backgroundColor: "#f7e7ec", borderRadius: 999, paddingVertical: 6, paddingHorizontal: 10 },
+  setupBadgeReady: { color: "#3c6b4f", backgroundColor: "#e8f3ec" },
+  setupItem: { flexDirection: "row", alignItems: "center", gap: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#e8dfe8", paddingTop: 10 },
+  setupMark: { width: 24, color: "#a278aa", fontSize: 20, fontWeight: "800" },
+  setupMarkDone: { color: "#3c6b4f" },
+  setupTitle: { color: "#2d2030", fontWeight: "800" },
   row: { flexDirection: "row", paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#e8dfe8" },
   rowGrow: { flex: 1 },
   rowTitle: { fontWeight: "800", fontSize: 16, color: "#2d2030" },
