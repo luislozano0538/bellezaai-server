@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import * as SecureStore from "expo-secure-store";
 import CreateAppointment from "./CreateAppointment";
+import AssistantScreen from "./AssistantScreen";
 
 const TOKEN_KEY = "bellezaai_token";
 const API_URL = String(process.env.EXPO_PUBLIC_API_URL || "https://bellezaai-server.onrender.com").replace(/\/$/, "");
@@ -393,13 +394,15 @@ function Shell({ token, logout }) {
         {tab === "appointments" && <Appointments token={token} logout={logout} />}
         {tab === "clients" && <Clients token={token} logout={logout} />}
         {tab === "create" && <CreateAppointment token={token} request={api} logout={logout} onCreated={() => setTab("appointments")} />}
+        {tab === "assistant" && <AssistantScreen token={token} request={api} logout={logout} />}
       </View>
       <View style={styles.nav}>
         {[
           ["home", "Inicio"],
           ["appointments", "Citas"],
           ["clients", "Clientes"],
-          ["create", "Nueva cita"]
+          ["assistant", "IA"],
+          ["create", "Nueva"]
         ].map(([key, label]) => (
           <Pressable key={key} onPress={() => setTab(key)} style={styles.navItem}>
             <Text style={[styles.navText, tab === key && styles.navActive]}>{label}</Text>
