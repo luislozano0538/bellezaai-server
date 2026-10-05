@@ -8,6 +8,8 @@ export default function StaffAccessScreen({ token, request, logout, goBack }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [resetId, setResetId] = useState("");
+  const [resetPassword, setResetPassword] = useState("");
   const [notice, setNotice] = useState("Cargando accesos…");
   const [busy, setBusy] = useState(false);
 
@@ -62,6 +64,31 @@ export default function StaffAccessScreen({ token, request, logout, goBack }) {
       setPassword("");
       await load("Actualizando accesos…");
       setNotice("Acceso creado.");
+    } catch (error) {
+      if (error.status === 401) return logout();
+      setNotice(error.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function resetStaffPassword(account) {
+    if (busy) return;
+    if (resetPassword.length < 8) {
+      setNotice("La nueva contraseña debe tener al menos 8 caracteres.");
+      return;
+    }
+    setBusy(true);
+    setNotice("Cambiando contraseña…");
+    try {
+      await request("/api/staff-users/" + encodeURIComponent(account.id) + "/password", {
+        token,
+        method: "PATCH",
+        body: { password: resetPassword }
+      });
+      setResetId("");
+      setResetPassword("");
+      setNotice("Contraseña actualizada.");
     } catch (error) {
       if (error.status === 401) return logout();
       setNotice(error.message);
@@ -155,17 +182,52 @@ export default function StaffAccessScreen({ token, request, logout, goBack }) {
       <View style={styles.card}>
         <Text style={styles.sectionTitle}>Cuentas del equipo</Text>
         {accounts.map(account => (
-          <View key={account.id} style={styles.item}>
-            <View style={styles.grow}>
-              <Text style={styles.itemTitle}>{account.professional_name || account.name}</Text>
-              <Text style={styles.muted}>{account.email}</Text>
-              <Text style={account.active ? styles.active : styles.inactive}>
-                {account.active ? "Acceso activo" : "Acceso desactivado"}
-              </Text>
+          <View key={account.id} style={styles.accountBlock}>
+            <View style={styles.item}>
+              <View style={styles.grow}>
+                <Text style={styles.itemTitle}>{account.professional_name || account.name}</Text>
+                <Text style={styles.muted}>{account.email}</Text>
+                <Text style={account.active ? styles.active : styles.inactive}>
+                  {account.active ? "Acceso activo" : "Acceso desactivado"}
+                </Text>
+              </View>
+              <View style={styles.accountActions}>
+                <Pressable disabled={busy} onPress={() => toggle(account)} style={styles.secondary}>
+                  <Text style={styles.secondaryText}>{account.active ? "Desactivar" : "Activar"}</Text>
+                </Pressable>
+                <Pressable
+                  disabled={busy}
+                  onPress={() => {
+                    setResetId(resetId === account.id ? "" : account.id);
+                    setResetPassword("");
+                  }}
+                  style={styles.secondary}
+                >
+                  <Text style={styles.secondaryText}>Cambiar clave</Text>
+                </Pressable>
+              </View>
             </View>
-            <Pressable disabled={busy} onPress={() => toggle(account)} style={styles.secondary}>
-              <Text style={styles.secondaryText}>{account.active ? "Desactivar" : "Activar"}</Text>
-            </Pressable>
+
+            {resetId === account.id && (
+              <View style={styles.resetBox}>
+                <Text style={styles.label}>Nueva contraseña</Text>
+                <TextInput
+                  value={resetPassword}
+                  onChangeText={setResetPassword}
+                  secureTextEntry
+                  maxLength={200}
+                  style={styles.input}
+                  placeholder="Mínimo 8 caracteres"
+                />
+                <Pressable
+                  disabled={busy}
+                  onPress={() => resetStaffPassword(account)}
+                  style={[styles.primary, busy && styles.disabled]}
+                >
+                  <Text style={styles.primaryText}>Guardar nueva contraseña</Text>
+                </Pressable>
+              </View>
+            )}
           </View>
         ))}
         {!accounts.length && !notice && <Text style={styles.muted}>Todavía no hay cuentas de trabajadores.</Text>}
@@ -195,7 +257,10 @@ const styles = StyleSheet.create({
   primaryText: { color: "white", fontWeight: "800" },
   secondary: { borderWidth: 1, borderColor: "#74407d", borderRadius: 12, paddingVertical: 9, paddingHorizontal: 11 },
   secondaryText: { color: "#74407d", fontWeight: "800" },
-  item: { flexDirection: "row", gap: 12, alignItems: "center", borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#e5dce5", paddingTop: 12 },
+  accountBlock: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#e5dce5", paddingTop: 12, gap: 10 },
+  item: { flexDirection: "row", gap: 12, alignItems: "center" },
+  accountActions: { gap: 7 },
+  resetBox: { gap: 8, backgroundColor: "#faf7fa", borderRadius: 14, padding: 12 },
   grow: { flex: 1 },
   itemTitle: { color: "#2d2030", fontSize: 16, fontWeight: "800" },
   active: { color: "#3c6b4f", fontWeight: "700", marginTop: 3 },
