@@ -125,6 +125,41 @@ export function registerStaffAccess({ app, pool, auth }) {
     }
   });
 
+  app.patch("/api/staff-users/:id/password", auth, async (req, res) => {
+    if (req.user.role !== "owner") {
+      return res.status(403).json({ error: "Solo el propietario puede cambiar contraseñas del equipo." });
+    }
+
+    if (
+      !uuid(req.params.id) ||
+      typeof req.body?.password !== "string" ||
+      req.body.password.length < 8 ||
+      req.body.password.length > 200
+    ) {
+      return res.status(400).json({ error: "La nueva contraseña debe tener al menos 8 caracteres." });
+    }
+
+    try {
+      const hash = await bcrypt.hash(req.body.password, 12);
+      const q = await pool.query(
+        `UPDATE users
+         SET password_hash=$3
+         WHERE id=$1 AND salon_id=$2 AND role='staff'
+         RETURNING id`,
+        [req.params.id, req.user.salonId, hash]
+      );
+
+      if (!q.rows[0]) {
+        return res.status(404).json({ error: "Acceso no encontrado." });
+      }
+
+      res.json({ saved: true });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: "No se pudo cambiar la contraseña." });
+    }
+  });
+
   app.patch("/api/staff-users/:id", auth, async (req, res) => {
     if (req.user.role !== "owner") {
       return res.status(403).json({ error: "Solo el propietario puede gestionar accesos del equipo." });
