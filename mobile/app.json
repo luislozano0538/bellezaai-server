@@ -21,6 +21,11 @@
           "cameraPermission": "BellezaAI necesita acceso a la cámara para añadir fotos del salón."
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "0c369ac3-575a-4298-9571-15819362fbf8"
+      }
+    }
   }
 }
