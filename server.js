@@ -457,9 +457,16 @@ app.post("/api/salon/check-hours", auth, async (req, res) => {
 
 app.get("/api/profile", auth, async (req, res) => {
   try {
-    const q = await pool.query("SELECT name FROM users WHERE id=$1 AND salon_id=$2", [req.user.id, req.user.salonId]);
+    const q = await pool.query(
+      "SELECT name,role,professional_id FROM users WHERE id=$1 AND salon_id=$2 AND active=true",
+      [req.user.id, req.user.salonId]
+    );
     if (!q.rows.length) return res.status(404).json({error:"Cuenta no encontrada."});
-    res.json({name:q.rows[0].name});
+    res.json({
+      name:q.rows[0].name,
+      role:q.rows[0].role,
+      professionalId:q.rows[0].professional_id || null
+    });
   } catch {
     res.status(500).json({error:"No se pudo cargar el perfil."});
   }
@@ -491,34 +498,43 @@ app.patch("/api/salon", auth, async (req, res) => {
 
 app.get("/api/dashboard", auth, async (req, res) => {
   const sid = req.user.salonId;
+  const professionalId = scopedProfessionalId(req, res);
+  if (professionalId === false) return;
 
-  const [appointments, clients, reminders] =
-    await Promise.all([
-      pool.query(
-        `SELECT COUNT(*)::int n
-         FROM appointments
-         WHERE salon_id=$1
-         AND status<>'cancelled'`,
-        [sid]
-      ),
-
-      pool.query(
-        `SELECT COUNT(*)::int n
-         FROM clients
-         WHERE salon_id=$1`,
-        [sid]
-      ),
-
-      pool.query(
-        `SELECT COUNT(*)::int n
-         FROM reminders r
-         JOIN appointments a
-         ON a.id=r.appointment_id
-         WHERE a.salon_id=$1
-         AND r.status='pending'`,
-        [sid]
-      )
-    ]);
+  const [appointments, clients, reminders] = await Promise.all([
+    pool.query(
+      `SELECT COUNT(*)::int n
+       FROM appointments
+       WHERE salon_id=$1
+         AND status<>'cancelled'
+         AND ($2::uuid IS NULL OR professional_id=$2)`,
+      [sid, professionalId]
+    ),
+    pool.query(
+      `SELECT COUNT(DISTINCT c.id)::int n
+       FROM clients c
+       WHERE c.salon_id=$1
+         AND (
+           $2::uuid IS NULL OR
+           c.created_by_user_id=$3 OR
+           EXISTS (
+             SELECT 1 FROM appointments a
+             WHERE a.client_id=c.id AND a.salon_id=c.salon_id
+               AND a.professional_id=$2 AND a.status<>'cancelled'
+           )
+         )`,
+      [sid, professionalId, req.user.id]
+    ),
+    pool.query(
+      `SELECT COUNT(*)::int n
+       FROM reminders r
+       JOIN appointments a ON a.id=r.appointment_id
+       WHERE a.salon_id=$1
+         AND ($2::uuid IS NULL OR a.professional_id=$2)
+         AND r.status IN ('awaiting_connection','skipped')`,
+      [sid, professionalId]
+    )
+  ]);
 
   res.json({
     appointments: appointments.rows[0].n,
@@ -528,6 +544,9 @@ app.get("/api/dashboard", auth, async (req, res) => {
 });
 
 app.get("/api/appointments", auth, async (req, res) => {
+  const professionalId = scopedProfessionalId(req, res);
+  if (professionalId === false) return;
+
   const q = await pool.query(
     `SELECT
        a.id,
@@ -547,22 +566,37 @@ app.get("/api/appointments", auth, async (req, res) => {
      JOIN services s ON s.id=a.service_id
      LEFT JOIN professionals p ON p.id=a.professional_id
      WHERE a.salon_id=$1
+       AND ($2::uuid IS NULL OR a.professional_id=$2)
      ORDER BY a.starts_at`,
-    [req.user.salonId]
+    [req.user.salonId, professionalId]
   );
 
   res.json(q.rows);
 });  
 app.get("/api/clients", auth, async (req, res) => {
+  const professionalId = scopedProfessionalId(req, res);
+  if (professionalId === false) return;
+
   try {
     const q = await pool.query(
        `SELECT c.id, c.name, c.phone, c.email, c.notes, c.created_at,
          (SELECT COUNT(*)::int FROM appointments a
-          WHERE a.client_id=c.id AND a.salon_id=c.salon_id AND a.status<>'cancelled') AS appointment_count
+          WHERE a.client_id=c.id AND a.salon_id=c.salon_id
+            AND a.status<>'cancelled'
+            AND ($2::uuid IS NULL OR a.professional_id=$2)) AS appointment_count
        FROM clients c
        WHERE c.salon_id=$1
+         AND (
+           $2::uuid IS NULL OR
+           c.created_by_user_id=$3 OR
+           EXISTS (
+             SELECT 1 FROM appointments own
+             WHERE own.client_id=c.id AND own.salon_id=c.salon_id
+               AND own.professional_id=$2
+           )
+         )
        ORDER BY c.name`,
-      [req.user.salonId]
+      [req.user.salonId, professionalId, req.user.id]
     );
 
     res.json(q.rows);
@@ -585,10 +619,10 @@ app.post("/api/clients", auth, async (req, res) => {
 
     const q = await pool.query(
       `INSERT INTO clients
-       (id, salon_id, name, phone, email, notes)
-       VALUES ($1,$2,$3,$4,$5,$6)
+       (id, salon_id, name, phone, email, notes, created_by_user_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)
        RETURNING id, name, phone, email, notes, created_at`,
-      [id, req.user.salonId, name, phone, email, notes]
+      [id, req.user.salonId, name, phone, email, notes, req.user.id]
     );
 
     res.status(201).json(q.rows[0]);
@@ -602,10 +636,24 @@ app.get("/api/clients/:id/history", auth, async (req, res) => {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.params.id)) {
     return res.status(400).json({error: "Cliente inválido."});
   }
+  const professionalId = scopedProfessionalId(req, res);
+  if (professionalId === false) return;
+
   try {
     const client = await pool.query(
-      "SELECT id, name FROM clients WHERE id=$1 AND salon_id=$2",
-      [req.params.id, req.user.salonId]
+      `SELECT c.id,c.name
+       FROM clients c
+       WHERE c.id=$1 AND c.salon_id=$2
+         AND (
+           $3::uuid IS NULL OR
+           c.created_by_user_id=$4 OR
+           EXISTS (
+             SELECT 1 FROM appointments own
+             WHERE own.client_id=c.id AND own.salon_id=c.salon_id
+               AND own.professional_id=$3
+           )
+         )`,
+      [req.params.id, req.user.salonId, professionalId, req.user.id]
     );
     if (!client.rows.length) return res.status(404).json({error: "Cliente no encontrado."});
     const result = await pool.query(
@@ -613,8 +661,9 @@ app.get("/api/clients/:id/history", auth, async (req, res) => {
        FROM appointments a
        LEFT JOIN services s ON s.id=a.service_id AND s.salon_id=a.salon_id
        WHERE a.client_id=$1 AND a.salon_id=$2
+         AND ($3::uuid IS NULL OR a.professional_id=$3)
        ORDER BY a.starts_at DESC, a.id`,
-      [req.params.id, req.user.salonId]
+      [req.params.id, req.user.salonId, professionalId]
     );
     res.json({client: client.rows[0], appointments: result.rows});
   } catch (error) {
@@ -626,19 +675,31 @@ app.get("/api/clients/:id/history", auth, async (req, res) => {
 app.patch("/api/clients/:id", auth, async (req, res) => {
   const {name, phone = "", email = "", notes} = req.body || {};
   if (notes !== undefined && (typeof notes !== "string" || notes.length > 2000)) return res.status(400).json({error:"Las notas deben tener hasta 2000 caracteres."});
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.params.id) ||
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.params.id) ||
       typeof name !== "string" || !name.trim() || name.trim().length > 120 ||
       typeof phone !== "string" || phone.length > 80 ||
       typeof email !== "string" || email.length > 254 ||
       (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()))) {
     return res.status(400).json({error: "Revisa el nombre, teléfono y correo del cliente."});
   }
+  const professionalId = scopedProfessionalId(req, res);
+  if (professionalId === false) return;
+
   try {
     const q = await pool.query(
-      `UPDATE clients SET name=$3, phone=$4, email=$5, notes=COALESCE($6,notes)
-       WHERE id=$1 AND salon_id=$2
-       RETURNING id, name, phone, email, notes, created_at`,
-      [req.params.id, req.user.salonId, name.trim(), phone.trim(), email.trim(), notes === undefined ? null : notes.trim()]
+      `UPDATE clients c SET name=$3, phone=$4, email=$5, notes=COALESCE($6,c.notes)
+       WHERE c.id=$1 AND c.salon_id=$2
+         AND (
+           $7::uuid IS NULL OR
+           c.created_by_user_id=$8 OR
+           EXISTS (
+             SELECT 1 FROM appointments own
+             WHERE own.client_id=c.id AND own.salon_id=c.salon_id
+               AND own.professional_id=$7
+           )
+         )
+       RETURNING c.id, c.name, c.phone, c.email, c.notes, c.created_at`,
+      [req.params.id, req.user.salonId, name.trim(), phone.trim(), email.trim(), notes === undefined ? null : notes.trim(), professionalId, req.user.id]
     );
     if (!q.rows.length) return res.status(404).json({error: "Cliente no encontrado."});
     res.json(q.rows[0]);
@@ -665,6 +726,7 @@ app.get("/api/services", auth, async (req, res) => {
   }
 });
 app.post("/api/services", auth, async (req, res) => {
+  if (req.user.role !== "owner") return res.status(403).json({error:"Solo el propietario puede gestionar servicios."});
   try {
     const {
       name,
@@ -725,6 +787,7 @@ app.post("/api/services", auth, async (req, res) => {
 });
 
 app.patch("/api/services/:id", auth, async (req, res) => {
+  if (req.user.role !== "owner") return res.status(403).json({error:"Solo el propietario puede gestionar servicios."});
   try {
     const {
       name,
@@ -809,7 +872,10 @@ app.post("/api/appointments", auth, async (req, res) => {
   let db;
   let committed = false;
   try {
-    const { clientId, serviceId, startsAt, notes = "", professionalId = null } = req.body || {};
+    const { clientId, serviceId, startsAt, notes = "", professionalId: requestedProfessionalId = null } = req.body || {};
+    const staffProfessionalId = scopedProfessionalId(req, res);
+    if (staffProfessionalId === false) return;
+    const professionalId = staffProfessionalId || requestedProfessionalId;
 
     if (!clientId || !serviceId || !startsAt) {
       return res.status(400).json({ error: "Faltan datos de la cita." });
@@ -968,6 +1034,11 @@ app.patch("/api/appointments/:id", auth, async (req, res) => {
     );
     const appointment = existing.rows[0];
     if (!appointment) return res.status(404).json({ error: "Cita no encontrada." });
+    const staffProfessionalId = scopedProfessionalId(req, res);
+    if (staffProfessionalId === false) return;
+    if (staffProfessionalId && appointment.professional_id !== staffProfessionalId) {
+      return res.status(404).json({ error: "Cita no encontrada." });
+    }
 
     let result;
     if (body.status === "cancelled") {
@@ -984,7 +1055,8 @@ app.patch("/api/appointments/:id", auth, async (req, res) => {
         return res.status(409).json({ error: "Solo puedes editar citas confirmadas." });
       }
       const { clientId, serviceId, startsAt } = body;
-      const professionalId = body.professionalId === undefined ? appointment.professional_id : body.professionalId;
+      const professionalId = staffProfessionalId ||
+        (body.professionalId === undefined ? appointment.professional_id : body.professionalId);
       if (professionalId !== null && professionalId !== undefined) {
         if (typeof professionalId !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(professionalId)) return res.status(400).json({error:"Profesional inválido."});
         const professional = await db.query("SELECT id FROM professionals WHERE id=$1 AND salon_id=$2 AND active=true", [professionalId, req.user.salonId]);
@@ -1066,6 +1138,9 @@ app.patch("/api/appointments/:id/attendance", auth, async (req, res) => {
     const found=await db.query("SELECT * FROM appointments WHERE id=$1 AND salon_id=$2 FOR UPDATE",[req.params.id,req.user.salonId]);
     const appointment=found.rows[0];
     if(!appointment) return res.status(404).json({error:"Cita no encontrada."});
+    const staffProfessionalId=scopedProfessionalId(req,res);
+    if(staffProfessionalId===false)return;
+    if(staffProfessionalId && appointment.professional_id!==staffProfessionalId)return res.status(404).json({error:"Cita no encontrada."});
     if(!allowed.includes(appointment.status) || appointment.status!==expectedStatus) return res.status(409).json({error:"La cita cambió. Actualiza la agenda antes de modificar su asistencia."});
     const now=new Date();
     if(new Date(appointment.starts_at)>now || (status==="completed" && new Date(appointment.ends_at)>now)) return res.status(400).json({error:"Registra la asistencia después del inicio; marca atendida cuando termine el horario de la cita."});
@@ -1077,6 +1152,9 @@ app.patch("/api/appointments/:id/attendance", auth, async (req, res) => {
 });
 
 app.get("/api/reminders", auth, async (req, res) => {
+  const professionalId = scopedProfessionalId(req, res);
+  if (professionalId === false) return;
+
   try {
     const q = await pool.query(
       `SELECT r.id, r.scheduled_at, a.starts_at,
@@ -1088,10 +1166,11 @@ app.get("/api/reminders", auth, async (req, res) => {
        JOIN clients c ON c.id=a.client_id AND c.salon_id=a.salon_id
        JOIN services s ON s.id=a.service_id AND s.salon_id=a.salon_id
        WHERE a.salon_id=$1
+         AND ($2::uuid IS NULL OR a.professional_id=$2)
          AND a.status='confirmed' AND a.starts_at > NOW()
          AND r.status IN ('awaiting_connection', 'skipped')
        ORDER BY r.scheduled_at, r.id`,
-      [req.user.salonId]
+      [req.user.salonId, professionalId]
     );
     res.json({ connected: false, hoursBefore: 24, reminders: q.rows });
   } catch (error) {
@@ -1102,17 +1181,25 @@ app.get("/api/reminders", auth, async (req, res) => {
 
 // GET /api/professionals - Listar todos los profesionales del salón
 app.get("/api/professionals", auth, async (req, res) => {
+  const professionalId = scopedProfessionalId(req, res);
+  if (professionalId === false) return;
+
   try {
+    const owner = req.user.role === "owner";
     const q = await pool.query(
-      `SELECT id, name, phone, email, profile_photo_url, active, weekly_hours,
-              commission_type, commission_value, membership_fee, created_at
-       FROM professionals
-       WHERE salon_id=$1
-       ORDER BY name`,
-      [req.user.salonId]
+      owner
+        ? `SELECT id,name,phone,email,profile_photo_url,active,weekly_hours,
+                  commission_type,commission_value,membership_fee,created_at
+           FROM professionals
+           WHERE salon_id=$1
+           ORDER BY name`
+        : `SELECT id,name,phone,email,profile_photo_url,active,weekly_hours,created_at
+           FROM professionals
+           WHERE salon_id=$1 AND id=$2
+           ORDER BY name`,
+      owner ? [req.user.salonId] : [req.user.salonId, professionalId]
     );
 
-    // Obtener especialidades para cada profesional
     const professionals = await Promise.all(
       q.rows.map(async (prof) => {
         const specQ = await pool.query(
@@ -1122,7 +1209,7 @@ app.get("/api/professionals", auth, async (req, res) => {
         );
         return {
           ...prof,
-          specialties: specQ.rows.map(s => s.specialty_name)
+          specialties: specQ.rows.map(row => row.specialty_name)
         };
       })
     );
