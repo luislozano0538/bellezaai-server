@@ -1,0 +1,390 @@
+import React, { useEffect, useMemo, useState } from "react";
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View
+} from "react-native";
+import * as SecureStore from "expo-secure-store";
+
+const TOKEN_KEY = "bellezaai_token";
+const API_URL = String(process.env.EXPO_PUBLIC_API_URL || "").replace(/\/$/, "");
+
+async function api(path, { token, method = "GET", body } = {}) {
+  if (!API_URL) throw new Error("Falta configurar EXPO_PUBLIC_API_URL.");
+  const response = await fetch(API_URL + path, {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: "Bearer " + token } : {})
+    },
+    ...(body ? { body: JSON.stringify(body) } : {})
+  });
+  let data = {};
+  try { data = await response.json(); } catch {}
+  if (!response.ok) {
+    const error = new Error(data.error || "No se pudo completar la solicitud.");
+    error.status = response.status;
+    throw error;
+  }
+  return data;
+}
+
+function Button({ children, onPress, disabled, secondary }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.button,
+        secondary && styles.buttonSecondary,
+        disabled && styles.disabled,
+        pressed && !disabled && styles.pressed
+      ]}
+    >
+      <Text style={[styles.buttonText, secondary && styles.buttonSecondaryText]}>
+        {children}
+      </Text>
+    </Pressable>
+  );
+}
+
+function Login({ onLoggedIn }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState("");
+
+  async function submit() {
+    if (busy) return;
+    if (!email.trim() || !password) {
+      setNotice("Escribe tu correo y contraseña.");
+      return;
+    }
+    setBusy(true);
+    setNotice("Entrando…");
+    try {
+      const result = await api("/api/auth/login", {
+        method: "POST",
+        body: { email: email.trim(), password }
+      });
+      await SecureStore.setItemAsync(TOKEN_KEY, result.token);
+      onLoggedIn(result.token);
+    } catch (error) {
+      setNotice(error.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <SafeAreaView style={styles.flex}>
+        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.login}>
+          <View style={styles.logo}><Text style={styles.logoText}>B</Text></View>
+          <Text style={styles.title}>BellezaAI</Text>
+          <Text style={styles.subtitle}>Tu salón, clientes y agenda en un solo lugar.</Text>
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Iniciar sesión</Text>
+            <Text style={styles.label}>Correo</Text>
+            <TextInput
+              style={styles.input}
+              value={email}
+              onChangeText={setEmail}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              autoComplete="email"
+              placeholder="tu@correo.com"
+            />
+            <Text style={styles.label}>Contraseña</Text>
+            <TextInput
+              style={styles.input}
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+              autoCapitalize="none"
+              autoComplete="password"
+              placeholder="••••••••"
+              onSubmitEditing={submit}
+            />
+            {!!notice && <Text style={styles.notice}>{notice}</Text>}
+            <Button onPress={submit} disabled={busy}>{busy ? "Entrando…" : "Entrar"}</Button>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    </KeyboardAvoidingView>
+  );
+}
+
+function Metric({ value, label }) {
+  return (
+    <View style={styles.metric}>
+      <Text style={styles.metricValue}>{value}</Text>
+      <Text style={styles.metricLabel}>{label}</Text>
+    </View>
+  );
+}
+
+function Home({ token, logout }) {
+  const [data, setData] = useState(null);
+  const [appointments, setAppointments] = useState([]);
+  const [notice, setNotice] = useState("Cargando…");
+  const [busy, setBusy] = useState(false);
+
+  async function load() {
+    if (busy) return;
+    setBusy(true);
+    setNotice("Actualizando…");
+    try {
+      const [dashboard, profile, salon, appts] = await Promise.all([
+        api("/api/dashboard", { token }),
+        api("/api/profile", { token }),
+        api("/api/salon", { token }),
+        api("/api/appointments", { token })
+      ]);
+      setData({ dashboard, profile, salon });
+      setAppointments(appts);
+      setNotice("");
+    } catch (error) {
+      if (error.status === 401) return logout();
+      setNotice(error.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  useEffect(() => { load(); }, []);
+
+  const nextAppointments = useMemo(() => appointments
+    .filter(item => item.status !== "cancelled" && new Date(item.starts_at) >= new Date())
+    .slice(0, 5), [appointments]);
+
+  return (
+    <ScrollView contentContainerStyle={styles.screen}>
+      <View style={styles.headerRow}>
+        <View>
+          <Text style={styles.eyebrow}>BellezaAI</Text>
+          <Text style={styles.screenTitle}>{data?.salon?.name || "Tu salón"}</Text>
+          <Text style={styles.muted}>Hola, {data?.profile?.name || "propietario"}</Text>
+        </View>
+        <Pressable onPress={load} disabled={busy}><Text style={styles.link}>{busy ? "…" : "Actualizar"}</Text></Pressable>
+      </View>
+
+      {!!notice && <Text style={styles.notice}>{notice}</Text>}
+
+      <View style={styles.metrics}>
+        <Metric value={data?.dashboard?.appointments ?? "—"} label="Citas" />
+        <Metric value={data?.dashboard?.clients ?? "—"} label="Clientes" />
+        <Metric value={data?.dashboard?.pendingReminders ?? "—"} label="Recordatorios" />
+      </View>
+
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Próximas citas</Text>
+        {nextAppointments.length ? nextAppointments.map(item => (
+          <View key={item.id} style={styles.row}>
+            <View style={styles.rowGrow}>
+              <Text style={styles.rowTitle}>{item.name}</Text>
+              <Text style={styles.muted}>{item.service}{item.professional_name ? " · " + item.professional_name : ""}</Text>
+              <Text style={styles.muted}>{new Date(item.starts_at).toLocaleString()}</Text>
+            </View>
+          </View>
+        )) : <Text style={styles.muted}>No hay próximas citas.</Text>}
+      </View>
+
+      <Button secondary onPress={logout}>Cerrar sesión</Button>
+    </ScrollView>
+  );
+}
+
+function Appointments({ token, logout }) {
+  const [items, setItems] = useState([]);
+  const [notice, setNotice] = useState("Cargando citas…");
+
+  async function load() {
+    setNotice("Actualizando…");
+    try {
+      setItems(await api("/api/appointments", { token }));
+      setNotice("");
+    } catch (error) {
+      if (error.status === 401) return logout();
+      setNotice(error.message);
+    }
+  }
+
+  useEffect(() => { load(); }, []);
+
+  return (
+    <ScrollView contentContainerStyle={styles.screen}>
+      <View style={styles.headerRow}>
+        <Text style={styles.screenTitle}>Citas</Text>
+        <Pressable onPress={load}><Text style={styles.link}>Actualizar</Text></Pressable>
+      </View>
+      {!!notice && <Text style={styles.notice}>{notice}</Text>}
+      {items.map(item => (
+        <View key={item.id} style={styles.card}>
+          <Text style={styles.rowTitle}>{item.name}</Text>
+          <Text style={styles.muted}>{item.service}</Text>
+          <Text style={styles.muted}>{new Date(item.starts_at).toLocaleString()}</Text>
+          <Text style={styles.muted}>{item.professional_name || "Sin profesional asignado"}</Text>
+          <Text style={styles.status}>{item.status}</Text>
+        </View>
+      ))}
+      {!items.length && !notice && <Text style={styles.muted}>No hay citas guardadas.</Text>}
+    </ScrollView>
+  );
+}
+
+function Clients({ token, logout }) {
+  const [items, setItems] = useState([]);
+  const [notice, setNotice] = useState("Cargando clientes…");
+
+  async function load() {
+    setNotice("Actualizando…");
+    try {
+      setItems(await api("/api/clients", { token }));
+      setNotice("");
+    } catch (error) {
+      if (error.status === 401) return logout();
+      setNotice(error.message);
+    }
+  }
+
+  useEffect(() => { load(); }, []);
+
+  return (
+    <ScrollView contentContainerStyle={styles.screen}>
+      <View style={styles.headerRow}>
+        <Text style={styles.screenTitle}>Clientes</Text>
+        <Pressable onPress={load}><Text style={styles.link}>Actualizar</Text></Pressable>
+      </View>
+      {!!notice && <Text style={styles.notice}>{notice}</Text>}
+      {items.map(item => (
+        <View key={item.id} style={styles.card}>
+          <Text style={styles.rowTitle}>{item.name}</Text>
+          {!!item.phone && <Text style={styles.muted}>{item.phone}</Text>}
+          {!!item.email && <Text style={styles.muted}>{item.email}</Text>}
+          <Text style={styles.muted}>{item.appointment_count || 0} cita(s)</Text>
+        </View>
+      ))}
+      {!items.length && !notice && <Text style={styles.muted}>No hay clientes guardados.</Text>}
+    </ScrollView>
+  );
+}
+
+function Shell({ token, logout }) {
+  const [tab, setTab] = useState("home");
+  return (
+    <SafeAreaView style={styles.flex}>
+      <StatusBar barStyle="dark-content" />
+      <View style={styles.flex}>
+        {tab === "home" && <Home token={token} logout={logout} />}
+        {tab === "appointments" && <Appointments token={token} logout={logout} />}
+        {tab === "clients" && <Clients token={token} logout={logout} />}
+      </View>
+      <View style={styles.nav}>
+        {[
+          ["home", "Inicio"],
+          ["appointments", "Citas"],
+          ["clients", "Clientes"]
+        ].map(([key, label]) => (
+          <Pressable key={key} onPress={() => setTab(key)} style={styles.navItem}>
+            <Text style={[styles.navText, tab === key && styles.navActive]}>{label}</Text>
+          </Pressable>
+        ))}
+      </View>
+    </SafeAreaView>
+  );
+}
+
+export default function App() {
+  const [token, setToken] = useState(null);
+  const [booting, setBooting] = useState(true);
+
+  useEffect(() => {
+    SecureStore.getItemAsync(TOKEN_KEY)
+      .then(setToken)
+      .finally(() => setBooting(false));
+  }, []);
+
+  async function logout() {
+    await SecureStore.deleteItemAsync(TOKEN_KEY);
+    setToken(null);
+  }
+
+  if (booting) {
+    return (
+      <SafeAreaView style={[styles.flex, styles.center]}>
+        <ActivityIndicator />
+        <Text style={styles.muted}>Abriendo BellezaAI…</Text>
+      </SafeAreaView>
+    );
+  }
+
+  return token
+    ? <Shell token={token} logout={logout} />
+    : <Login onLoggedIn={setToken} />;
+}
+
+const styles = StyleSheet.create({
+  flex: { flex: 1, backgroundColor: "#f8f5f8" },
+  center: { alignItems: "center", justifyContent: "center", gap: 12 },
+  login: { flexGrow: 1, justifyContent: "center", padding: 24 },
+  logo: {
+    width: 72, height: 72, borderRadius: 24, backgroundColor: "#74407d",
+    alignItems: "center", justifyContent: "center", alignSelf: "center", marginBottom: 16
+  },
+  logoText: { color: "white", fontSize: 36, fontWeight: "800" },
+  title: { fontSize: 34, fontWeight: "800", textAlign: "center", color: "#2d2030" },
+  subtitle: { textAlign: "center", color: "#756779", marginTop: 8, marginBottom: 28, fontSize: 16 },
+  screen: { padding: 18, paddingBottom: 40, gap: 14 },
+  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 12 },
+  eyebrow: { color: "#74407d", fontWeight: "800", textTransform: "uppercase", letterSpacing: 1 },
+  screenTitle: { fontSize: 28, fontWeight: "800", color: "#2d2030" },
+  card: {
+    backgroundColor: "white", borderRadius: 20, padding: 18,
+    borderWidth: 1, borderColor: "#eadfea", gap: 10
+  },
+  cardTitle: { fontSize: 20, fontWeight: "800", color: "#2d2030" },
+  label: { fontWeight: "700", color: "#3f3143", marginTop: 6 },
+  input: {
+    borderWidth: 1, borderColor: "#daceda", backgroundColor: "#fff",
+    borderRadius: 13, paddingHorizontal: 14, paddingVertical: 13, fontSize: 16
+  },
+  notice: { color: "#7b3650", lineHeight: 20 },
+  button: {
+    borderRadius: 14, paddingVertical: 14, paddingHorizontal: 18,
+    backgroundColor: "#74407d", alignItems: "center", marginTop: 6
+  },
+  buttonSecondary: { backgroundColor: "transparent", borderWidth: 1, borderColor: "#74407d" },
+  buttonText: { color: "white", fontWeight: "800", fontSize: 16 },
+  buttonSecondaryText: { color: "#74407d" },
+  disabled: { opacity: 0.5 },
+  pressed: { opacity: 0.8 },
+  metrics: { flexDirection: "row", gap: 10 },
+  metric: {
+    flex: 1, backgroundColor: "white", borderWidth: 1, borderColor: "#eadfea",
+    borderRadius: 18, padding: 14
+  },
+  metricValue: { fontSize: 26, fontWeight: "800", color: "#74407d" },
+  metricLabel: { fontSize: 12, color: "#756779", marginTop: 4 },
+  row: { flexDirection: "row", paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#e8dfe8" },
+  rowGrow: { flex: 1 },
+  rowTitle: { fontWeight: "800", fontSize: 16, color: "#2d2030" },
+  muted: { color: "#756779", lineHeight: 20 },
+  status: { alignSelf: "flex-start", marginTop: 4, fontWeight: "700", color: "#74407d" },
+  link: { color: "#74407d", fontWeight: "800", paddingVertical: 4 },
+  nav: {
+    flexDirection: "row", backgroundColor: "white", borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "#ded4de", paddingBottom: Platform.OS === "android" ? 8 : 0
+  },
+  navItem: { flex: 1, alignItems: "center", paddingVertical: 14 },
+  navText: { color: "#887b8b", fontWeight: "700" },
+  navActive: { color: "#74407d" }
+});
