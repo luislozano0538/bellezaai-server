@@ -207,36 +207,87 @@ function Home({ token, logout }) {
 function Appointments({ token, logout }) {
   const [items, setItems] = useState([]);
   const [notice, setNotice] = useState("Cargando citas…");
+  const [cancelId, setCancelId] = useState("");
+  const [busyId, setBusyId] = useState("");
 
-  async function load() {
-    setNotice("Actualizando…");
+  async function load(message = "Actualizando…") {
+    setNotice(message);
     try {
       setItems(await api("/api/appointments", { token }));
       setNotice("");
+      setCancelId("");
     } catch (error) {
       if (error.status === 401) return logout();
       setNotice(error.message);
     }
   }
 
-  useEffect(() => { load(); }, []);
+  async function cancelAppointment(id) {
+    if (busyId) return;
+    setBusyId(id);
+    setNotice("Cancelando cita…");
+    try {
+      await api("/api/appointments/" + encodeURIComponent(id), {
+        token,
+        method: "PATCH",
+        body: { status: "cancelled" }
+      });
+      await load("Actualizando agenda…");
+      setNotice("Cita cancelada.");
+    } catch (error) {
+      if (error.status === 401) return logout();
+      setNotice(error.message);
+    } finally {
+      setBusyId("");
+    }
+  }
+
+  useEffect(() => { load("Cargando citas…"); }, []);
 
   return (
     <ScrollView contentContainerStyle={styles.screen}>
       <View style={styles.headerRow}>
         <Text style={styles.screenTitle}>Citas</Text>
-        <Pressable onPress={load}><Text style={styles.link}>Actualizar</Text></Pressable>
+        <Pressable onPress={() => load()}><Text style={styles.link}>Actualizar</Text></Pressable>
       </View>
       {!!notice && <Text style={styles.notice}>{notice}</Text>}
-      {items.map(item => (
-        <View key={item.id} style={styles.card}>
-          <Text style={styles.rowTitle}>{item.name}</Text>
-          <Text style={styles.muted}>{item.service}</Text>
-          <Text style={styles.muted}>{new Date(item.starts_at).toLocaleString()}</Text>
-          <Text style={styles.muted}>{item.professional_name || "Sin profesional asignado"}</Text>
-          <Text style={styles.status}>{item.status}</Text>
-        </View>
-      ))}
+      {items.map(item => {
+        const futureConfirmed = item.status === "confirmed" && new Date(item.starts_at) > new Date();
+        const confirming = cancelId === item.id;
+        return (
+          <View key={item.id} style={styles.card}>
+            <Text style={styles.rowTitle}>{item.name}</Text>
+            <Text style={styles.muted}>{item.service}</Text>
+            <Text style={styles.muted}>{new Date(item.starts_at).toLocaleString()}</Text>
+            <Text style={styles.muted}>{item.professional_name || "Sin profesional asignado"}</Text>
+            <Text style={styles.status}>{item.status}</Text>
+
+            {futureConfirmed && !confirming && (
+              <Pressable onPress={() => setCancelId(item.id)} style={styles.smallAction}>
+                <Text style={styles.smallActionText}>Cancelar cita</Text>
+              </Pressable>
+            )}
+
+            {futureConfirmed && confirming && (
+              <View style={styles.confirmBox}>
+                <Text style={styles.notice}>¿Seguro? El horario quedará libre.</Text>
+                <Pressable
+                  disabled={busyId === item.id}
+                  onPress={() => cancelAppointment(item.id)}
+                  style={[styles.dangerAction, busyId === item.id && styles.disabled]}
+                >
+                  <Text style={styles.dangerActionText}>
+                    {busyId === item.id ? "Cancelando…" : "Sí, cancelar"}
+                  </Text>
+                </Pressable>
+                <Pressable disabled={!!busyId} onPress={() => setCancelId("")} style={styles.smallAction}>
+                  <Text style={styles.smallActionText}>Conservar cita</Text>
+                </Pressable>
+              </View>
+            )}
+          </View>
+        );
+      })}
       {!items.length && !notice && <Text style={styles.muted}>No hay citas guardadas.</Text>}
     </ScrollView>
   );
@@ -245,9 +296,14 @@ function Appointments({ token, logout }) {
 function Clients({ token, logout }) {
   const [items, setItems] = useState([]);
   const [notice, setNotice] = useState("Cargando clientes…");
+  const [showForm, setShowForm] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
 
-  async function load() {
-    setNotice("Actualizando…");
+  async function load(message = "Actualizando…") {
+    setNotice(message);
     try {
       setItems(await api("/api/clients", { token }));
       setNotice("");
@@ -257,15 +313,63 @@ function Clients({ token, logout }) {
     }
   }
 
-  useEffect(() => { load(); }, []);
+  async function createClient() {
+    if (busy) return;
+    if (!name.trim()) {
+      setNotice("Escribe el nombre del cliente.");
+      return;
+    }
+    setBusy(true);
+    setNotice("Guardando cliente…");
+    try {
+      await api("/api/clients", {
+        token,
+        method: "POST",
+        body: { name: name.trim(), phone: phone.trim(), email: email.trim(), notes: "" }
+      });
+      setName("");
+      setPhone("");
+      setEmail("");
+      setShowForm(false);
+      await load("Actualizando clientes…");
+      setNotice("Cliente guardado.");
+    } catch (error) {
+      if (error.status === 401) return logout();
+      setNotice(error.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  useEffect(() => { load("Cargando clientes…"); }, []);
 
   return (
-    <ScrollView contentContainerStyle={styles.screen}>
+    <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.screen}>
       <View style={styles.headerRow}>
-        <Text style={styles.screenTitle}>Clientes</Text>
-        <Pressable onPress={load}><Text style={styles.link}>Actualizar</Text></Pressable>
+        <View>
+          <Text style={styles.screenTitle}>Clientes</Text>
+          <Pressable onPress={() => setShowForm(value => !value)}>
+            <Text style={styles.link}>{showForm ? "Cerrar formulario" : "+ Nuevo cliente"}</Text>
+          </Pressable>
+        </View>
+        <Pressable onPress={() => load()}><Text style={styles.link}>Actualizar</Text></Pressable>
       </View>
+
       {!!notice && <Text style={styles.notice}>{notice}</Text>}
+
+      {showForm && (
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Nuevo cliente</Text>
+          <Text style={styles.label}>Nombre</Text>
+          <TextInput value={name} onChangeText={setName} maxLength={120} style={styles.input} placeholder="Nombre del cliente" />
+          <Text style={styles.label}>Teléfono</Text>
+          <TextInput value={phone} onChangeText={setPhone} maxLength={80} keyboardType="phone-pad" style={styles.input} placeholder="Teléfono" />
+          <Text style={styles.label}>Correo opcional</Text>
+          <TextInput value={email} onChangeText={setEmail} maxLength={254} autoCapitalize="none" keyboardType="email-address" style={styles.input} placeholder="correo@ejemplo.com" />
+          <Button disabled={busy} onPress={createClient}>{busy ? "Guardando…" : "Guardar cliente"}</Button>
+        </View>
+      )}
+
       {items.map(item => (
         <View key={item.id} style={styles.card}>
           <Text style={styles.rowTitle}>{item.name}</Text>
@@ -389,5 +493,10 @@ const styles = StyleSheet.create({
   },
   navItem: { flex: 1, alignItems: "center", paddingVertical: 14 },
   navText: { color: "#887b8b", fontWeight: "700" },
-  navActive: { color: "#74407d" }
+  navActive: { color: "#74407d" },
+  smallAction: { alignSelf: "flex-start", borderWidth: 1, borderColor: "#74407d", borderRadius: 12, paddingVertical: 9, paddingHorizontal: 12, marginTop: 6 },
+  smallActionText: { color: "#74407d", fontWeight: "800" },
+  confirmBox: { gap: 8, paddingTop: 6 },
+  dangerAction: { alignSelf: "flex-start", backgroundColor: "#a02d43", borderRadius: 12, paddingVertical: 10, paddingHorizontal: 13 },
+  dangerActionText: { color: "white", fontWeight: "800" }
 });
