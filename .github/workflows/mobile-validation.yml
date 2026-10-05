@@ -6,12 +6,16 @@ on:
       - mobile-app-foundation
     paths:
       - "mobile/**"
+      - "server.js"
+      - "staff-access.js"
       - ".github/workflows/mobile-validation.yml"
   pull_request:
     branches:
       - main
     paths:
       - "mobile/**"
+      - "server.js"
+      - "staff-access.js"
       - ".github/workflows/mobile-validation.yml"
 
 jobs:
@@ -33,6 +37,11 @@ jobs:
 
       - name: Install dependencies
         run: npm install
+
+      - name: Backend syntax
+        run: |
+          node --check ../server.js
+          node --check ../staff-access.js
 
       - name: Expo Doctor
         run: npx expo-doctor
