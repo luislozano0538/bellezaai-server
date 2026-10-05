@@ -201,22 +201,57 @@ function requireConfig(res) {
   return true;
 }
 
-function auth(req, res, next) {
+async function auth(req, res, next) {
   if (!JWT_SECRET) {
     return res.status(503).json({
       error: "JWT_SECRET no configurado."
     });
   }
 
+  let decoded;
   try {
     const token = (req.headers.authorization || "")
       .replace("Bearer ", "");
-
-    req.user = jwt.verify(token, JWT_SECRET);
-    next();
+    decoded = jwt.verify(token, JWT_SECRET);
   } catch {
-    res.status(401).json({
+    return res.status(401).json({
       error: "Sesión inválida."
+    });
+  }
+
+  try {
+    const q = await pool.query(
+      `SELECT u.id,u.salon_id,u.role,u.professional_id,u.active,
+              p.active AS professional_active
+       FROM users u
+       LEFT JOIN professionals p
+         ON p.id=u.professional_id AND p.salon_id=u.salon_id
+       WHERE u.id=$1 AND u.salon_id=$2 AND u.active=true`,
+      [decoded.id, decoded.salonId]
+    );
+
+    const user = q.rows[0];
+    if (
+      !user ||
+      (user.role === "staff" &&
+        (!user.professional_id || user.professional_active !== true))
+    ) {
+      return res.status(401).json({
+        error: "Sesión inválida o acceso desactivado."
+      });
+    }
+
+    req.user = {
+      id: user.id,
+      salonId: user.salon_id,
+      role: user.role,
+      professionalId: user.professional_id || null
+    };
+    next();
+  } catch (error) {
+    console.error(error);
+    res.status(503).json({
+      error: "No se pudo validar la sesión."
     });
   }
 }
@@ -333,7 +368,13 @@ app.post("/api/auth/login", async (req, res) => {
   const { email, password } = req.body || {};
 
   const q = await pool.query(
-    "SELECT * FROM users WHERE email=$1 AND active=true",
+    `SELECT u.*
+     FROM users u
+     LEFT JOIN professionals p
+       ON p.id=u.professional_id AND p.salon_id=u.salon_id
+     WHERE u.email=$1
+       AND u.active=true
+       AND (u.role<>'staff' OR (p.id IS NOT NULL AND p.active=true))`,
     [String(email || "").trim().toLowerCase()]
   );
 
