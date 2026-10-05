@@ -1,36 +1,56 @@
 <!doctype html>
 <html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><meta name="robots" content="noindex,nofollow"><title>Mi reserva · BellezaAI</title>
 <style>
-*{box-sizing:border-box}body{margin:0;background:#f8f4f8;color:#2b2030;font-family:system-ui,sans-serif}main{max-width:640px;margin:40px auto;padding:20px}.card{background:white;border:1px solid #eadfea;border-radius:22px;padding:24px}h1{color:#703e7b}p{line-height:1.6}button,a{font:inherit}button{padding:13px 18px;border:1px solid #703e7b;border-radius:12px;color:#703e7b;background:white;cursor:pointer;margin:6px 6px 6px 0}button:disabled{opacity:.5;cursor:default}.danger{background:#a02d43;color:white;border-color:#a02d43}#details{white-space:pre-line}#confirmCancel{background:#fff1f3;border-radius:12px;padding:18px;margin-top:18px}a{color:#703e7b}.muted{color:#67586c;font-size:14px}
-</style></head><body><main><h1>Mi reserva</h1><div class="card"><p id="notice" role="status">Consultando tu reserva…</p><section id="booking" hidden><h2 id="status"></h2><p id="details"></p><p id="reference" class="muted"></p><button id="refresh" type="button">Actualizar datos</button><button id="cancel" type="button">Cancelar cita</button><section id="confirmCancel" hidden aria-labelledby="cancelTitle"><h3 id="cancelTitle">¿Quieres cancelar esta cita?</h3><p>Se liberará este horario. Si luego quieres asistir, tendrás que hacer otra reserva.</p><button id="keep" type="button">Conservar mi cita</button><button id="confirm" type="button" class="danger">Sí, cancelar mi cita</button></section><p id="help" class="muted"></p><p><a id="bookAgain">Reservar otra cita</a></p></section><p class="muted">Este enlace es privado y permite gestionar tu cita. Consérvalo y no lo compartas. Para otros cambios, contacta con el salón.</p></div></main>
+*{box-sizing:border-box}body{margin:0;background:#f8f4f8;color:#2b2030;font-family:system-ui,sans-serif}main{max-width:640px;margin:40px auto;padding:20px}.card{background:white;border:1px solid #eadfea;border-radius:22px;padding:24px}h1{color:#703e7b}p{line-height:1.6}button,a,input{font:inherit}input{padding:12px;border:1px solid #c8bacb;border-radius:10px;max-width:100%}#moveSlots button[aria-pressed=true]{background:#703e7b;color:white}#movePanel{border-top:1px solid #eadfea;margin-top:18px;padding-top:18px}button{padding:13px 18px;border:1px solid #703e7b;border-radius:12px;color:#703e7b;background:white;cursor:pointer;margin:6px 6px 6px 0}button:disabled{opacity:.5;cursor:default}.danger{background:#a02d43;color:white;border-color:#a02d43}#details{white-space:pre-line}#confirmCancel{background:#fff1f3;border-radius:12px;padding:18px;margin-top:18px}a{color:#703e7b}.muted{color:#67586c;font-size:14px}
+</style></head><body><main><h1>Mi reserva</h1><div class="card"><p id="notice" role="status">Consultando tu reserva…</p><section id="booking" hidden><h2 id="status"></h2><p id="details"></p><p id="reference" class="muted"></p><button id="refresh" type="button">Actualizar datos</button><button id="move" type="button">Cambiar fecha u hora</button><button id="cancel" type="button">Cancelar cita</button><section id="confirmCancel" hidden aria-labelledby="cancelTitle"><h3 id="cancelTitle">¿Quieres cancelar esta cita?</h3><p>Se liberará este horario. Si luego quieres asistir, tendrás que hacer otra reserva.</p><button id="keep" type="button">Conservar mi cita</button><button id="confirm" type="button" class="danger">Sí, cancelar mi cita</button></section><section id="movePanel" hidden><h3>Cambiar fecha u hora</h3><p>Conservas el servicio, profesional, duración y precio. Tu cita actual sigue reservada hasta confirmar el cambio.</p><label for="moveDate">Nueva fecha</label><p><input id="moveDate" type="date"></p><button id="searchMove" type="button">Buscar horarios</button><p id="moveNotice" role="status"></p><div id="moveSlots"></div><div id="moveReview" hidden><p id="moveSummary"></p><button id="confirmMove" type="button">Confirmar cambio de cita</button></div><button id="closeMove" type="button">Conservar horario actual</button></section><p id="help" class="muted"></p><p><a id="bookAgain">Reservar otra cita</a></p></section><p class="muted">Este enlace es privado y permite gestionar tu cita. Consérvalo y no lo compartas. Para otros cambios, contacta con el salón.</p></div></main>
 <script>
 (()=>{
  const $=id=>document.getElementById(id),parts=location.pathname.split('/').filter(Boolean),salon=parts[1],appointment=parts[2];
- const storageKey='bellezaManage:'+salon+':'+appointment;let token=location.hash.slice(1),current=null,busy=false;
+ const storageKey='bellezaManage:'+salon+':'+appointment;let token=location.hash.slice(1),current=null,busy=false,selected='';
  if(token){try{sessionStorage.setItem(storageKey,token);}catch{}history.replaceState(null,'',location.pathname);}
  else{try{token=sessionStorage.getItem(storageKey)||'';}catch{}}
  const base='/api/public/salons/'+encodeURIComponent(salon)+'/bookings/'+encodeURIComponent(appointment);
  $('bookAgain').href='/reservar/'+encodeURIComponent(salon);
  function render(data){
-  current=data;$('booking').hidden=false;$('confirmCancel').hidden=true;
+  current=data;resetMove();$('movePanel').hidden=true;$('move').hidden=!data.canCancel;$('booking').hidden=false;$('confirmCancel').hidden=true;
   const labels={confirmed:'Cita confirmada',cancelled:'Cita cancelada',completed:'Cita completada',no_show:'Cita marcada como no asistida'};
   $('status').textContent=labels[data.status]||'Estado de tu cita';
   const date=new Intl.DateTimeFormat('es',{timeZone:data.timezone,dateStyle:'full',timeStyle:'short'}).format(new Date(data.startsAt));
   $('details').textContent=data.salonName+'\n'+data.serviceName+' · '+Math.round((new Date(data.endsAt)-new Date(data.startsAt))/60000)+' minutos\n'+(data.price||'Consultar precio')+'\n'+data.professionalName+'\n'+date+'\nZona horaria: '+data.timezone;
   $('reference').textContent='Referencia: '+data.reference;$('cancel').hidden=!data.canCancel;
-  $('help').textContent=data.status==='cancelled'?'La cita está cancelada. Si la guardaste en tu calendario, elimínala también allí.':data.canCancel?'Puedes cancelar en línea antes de la hora de inicio.':'Para consultar o modificar esta cita, contacta con el salón.';
+  $('help').textContent=data.status==='cancelled'?'La cita está cancelada. Si la guardaste en tu calendario, elimínala también allí.':data.canCancel?'Puedes cambiar o cancelar en línea antes de la hora de inicio. Las modificaciones de fecha requieren que el salón acepte reservas en línea.':'Para consultar o modificar esta cita, contacta con el salón.';
  }
- async function request(action){
-  if(busy)return;busy=true;document.querySelectorAll('button').forEach(b=>b.disabled=true);$('notice').textContent=action==='cancel'?'Cancelando cita…':'Actualizando datos…';
+ async function request(action,extra={}){
+  if(busy)return;busy=true;document.querySelectorAll('button,input').forEach(b=>b.disabled=true);$('notice').textContent=action==='cancel'?'Cancelando cita…':'Actualizando datos…';
   try{
-   const response=await fetch(base+'/'+action,{method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',body:JSON.stringify({token,expectedStartsAt:current?.startsAt})});
+   const response=await fetch(base+'/'+action,{method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',body:JSON.stringify({token,expectedStartsAt:current?.startsAt,...extra})});
    const data=await response.json();if(!response.ok)throw new Error(data.error||'No se pudo completar la solicitud.');
-   render(data);$('notice').textContent=action==='cancel'?'Cancelación confirmada.':'Datos actualizados.';
-  }catch(error){$('confirmCancel').hidden=true;$('notice').textContent=error.message;if(action==='cancel'){$('cancel').hidden=true;$('help').textContent='Pulsa Actualizar datos para consultar el estado antes de volver a intentarlo.';}}
-  finally{busy=false;document.querySelectorAll('button').forEach(b=>b.disabled=false);}
+   if(action==='slots'){
+    $('moveSlots').replaceChildren();$('moveNotice').textContent=data.slots.length?'Elige el nuevo horario:':'No hay otros horarios disponibles ese día. Elige otra fecha.';
+    data.slots.forEach(iso=>{
+     const button=document.createElement('button');button.type='button';button.setAttribute('aria-pressed','false');button.textContent=formatDate(iso);
+     button.onclick=()=>{if(busy)return;selected=iso;$('moveSlots').querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b===button)));$('moveSummary').textContent='Cambiar de '+formatDate(current.startsAt)+' a '+formatDate(iso)+'.';$('moveReview').hidden=false;};
+     $('moveSlots').append(button);
+    });$('notice').textContent='';
+   }else{
+    render(data);$('notice').textContent=action==='cancel'?'Cancelación confirmada.':action==='reschedule'?'Cambio confirmado. Actualiza también tu calendario personal; la copia anterior no se sincroniza.':'Datos actualizados.';
+   }
+  }catch(error){$('confirmCancel').hidden=true;$('notice').textContent=error.message;if(action==='slots')resetMove();if(action==='cancel'||action==='reschedule'){$('cancel').hidden=true;$('move').hidden=true;$('movePanel').hidden=true;$('help').textContent='Pulsa Actualizar datos para consultar el estado antes de volver a intentarlo.';}}
+  finally{busy=false;document.querySelectorAll('button,input').forEach(b=>b.disabled=false);}
  }
+ function formatDate(iso){return new Intl.DateTimeFormat('es',{timeZone:current.timezone,dateStyle:'medium',timeStyle:'short'}).format(new Date(iso));}
+ function resetMove(){selected='';$('moveSlots').replaceChildren();$('moveReview').hidden=true;$('moveNotice').textContent='';}
+ $('move').onclick=()=>{
+  if(busy||!current?.canCancel)return;resetMove();$('confirmCancel').hidden=true;$('movePanel').hidden=false;
+  const key=value=>new Intl.DateTimeFormat('en-CA',{timeZone:current.timezone,year:'numeric',month:'2-digit',day:'2-digit'}).format(value);
+  $('moveDate').min=key(new Date());$('moveDate').max=key(new Date(Date.now()+89*86400000));$('moveDate').value=key(new Date(current.startsAt));$('moveDate').focus();
+ };
+ $('moveDate').onchange=resetMove;
+ $('closeMove').onclick=()=>{if(!busy){resetMove();$('movePanel').hidden=true;$('move').focus();}};
+ $('searchMove').onclick=()=>{if(busy)return;resetMove();if(!$('moveDate').value||!$('moveDate').checkValidity()){$('moveNotice').textContent='Elige una fecha entre hoy y los próximos 90 días.';return;}request('slots',{date:$('moveDate').value});};
+ $('confirmMove').onclick=()=>{if(!busy&&selected)request('reschedule',{date:$('moveDate').value,startsAt:selected});};
  $('refresh').onclick=()=>request('manage');
- $('cancel').onclick=()=>{if(busy||!current?.canCancel)return;$('confirmCancel').hidden=false;$('keep').focus();};
+ $('cancel').onclick=()=>{if(busy||!current?.canCancel)return;resetMove();$('movePanel').hidden=true;$('confirmCancel').hidden=false;$('keep').focus();};
  $('keep').onclick=()=>{$('confirmCancel').hidden=true;$('cancel').focus();};
  $('confirm').onclick=()=>request('cancel');
  if(!/^[A-Za-z0-9_-]{43}$/.test(token))$('notice').textContent='Abre el enlace privado completo que recibiste al confirmar la reserva.';
