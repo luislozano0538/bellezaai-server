@@ -15,7 +15,7 @@ import * as SecureStore from "expo-secure-store";
 import CreateAppointment from "./CreateAppointment";
 
 const TOKEN_KEY = "bellezaai_token";
-const API_URL = String(process.env.EXPO_PUBLIC_API_URL || "").replace(/\/$/, "");
+const API_URL = String(process.env.EXPO_PUBLIC_API_URL || "https://bellezaai-server.onrender.com").replace(/\/$/, "");
 
 async function api(path, { token, method = "GET", body } = {}) {
   if (!API_URL) throw new Error("Falta configurar EXPO_PUBLIC_API_URL.");
