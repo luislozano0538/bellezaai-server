@@ -54,3 +54,23 @@ La build `preview` usa distribución interna. En iOS, el dispositivo debe estar 
 ### Automatización futura
 
 Para builds desde CI se puede usar un token de Expo llamado `EXPO_TOKEN`. Nunca debe escribirse ese token dentro del repositorio; debe guardarse como secreto de GitHub/EAS.
+
+
+## Backend staging para la build preview
+
+Antes de crear la build `preview`, despliega esta rama en un backend de prueba separado.
+
+Requisitos recomendados:
+- rama del servidor: `mobile-app-foundation`
+- servicio separado, por ejemplo `bellezaai-staging`
+- base de datos PostgreSQL separada de producción
+- `JWT_SECRET` distinto al de producción
+- `OPENAI_API_KEY` solo si se quiere probar la pestaña IA
+- las demás variables secretas del servidor se configuran en el proveedor, nunca en GitHub
+
+Después configura en el entorno `preview` de EAS:
+
+`EXPO_PUBLIC_API_URL=https://TU-BACKEND-STAGING`
+
+La build preview está protegida para no usar automáticamente
+`https://bellezaai-server.onrender.com`. Si falta la URL de staging, las llamadas API fallarán en lugar de tocar producción.
