@@ -251,6 +251,26 @@ function Appointments({ token, logout, onEdit }) {
     }
   }
 
+  async function markAttendance(item, status) {
+    if (busyId) return;
+    setBusyId(item.id);
+    setNotice(status === "completed" ? "Marcando como atendida…" : "Marcando no asistió…");
+    try {
+      await api("/api/appointments/" + encodeURIComponent(item.id) + "/attendance", {
+        token,
+        method: "PATCH",
+        body: { status, expectedStatus: item.status }
+      });
+      await load("Actualizando agenda…");
+      setNotice(status === "completed" ? "Cita marcada como atendida." : "Cita marcada como no asistió.");
+    } catch (error) {
+      if (error.status === 401) return logout();
+      setNotice(error.message);
+    } finally {
+      setBusyId("");
+    }
+  }
+
   useEffect(() => { load("Cargando citas…"); }, []);
 
   return (
@@ -261,7 +281,10 @@ function Appointments({ token, logout, onEdit }) {
       </View>
       {!!notice && <Text style={styles.notice}>{notice}</Text>}
       {items.map(item => {
-        const futureConfirmed = item.status === "confirmed" && new Date(item.starts_at) > new Date();
+        const now = new Date();
+        const futureConfirmed = item.status === "confirmed" && new Date(item.starts_at) > now;
+        const startedConfirmed = item.status === "confirmed" && new Date(item.starts_at) <= now;
+        const canComplete = startedConfirmed && new Date(item.ends_at) <= now;
         const confirming = cancelId === item.id;
         return (
           <View key={item.id} style={styles.card}>
@@ -278,6 +301,27 @@ function Appointments({ token, logout, onEdit }) {
                 </Pressable>
                 <Pressable onPress={() => setCancelId(item.id)} style={styles.smallAction}>
                   <Text style={styles.smallActionText}>Cancelar cita</Text>
+                </Pressable>
+              </View>
+            )}
+
+            {startedConfirmed && (
+              <View style={styles.actionRow}>
+                {canComplete && (
+                  <Pressable
+                    disabled={busyId === item.id}
+                    onPress={() => markAttendance(item, "completed")}
+                    style={styles.smallAction}
+                  >
+                    <Text style={styles.smallActionText}>Atendida</Text>
+                  </Pressable>
+                )}
+                <Pressable
+                  disabled={busyId === item.id}
+                  onPress={() => markAttendance(item, "no_show")}
+                  style={styles.smallAction}
+                >
+                  <Text style={styles.smallActionText}>No asistió</Text>
                 </Pressable>
               </View>
             )}
