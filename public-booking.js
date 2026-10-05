@@ -16,7 +16,7 @@ export function registerPublicBooking({app,pool,auth,validBusinessHours,withinBu
     reads.set(key,item && item.until>now ? {...item,count:item.count+1}:{until:now+60000,count:1});
     next();
   }
-  registerPublicManagement({app,pool,limit,secret:managementSecret});
+  registerPublicManagement({app,pool,limit,secret:managementSecret,availability});
   async function salon(db,id) {
     if(!uuid(id)) throw fail(404,"Página de reservas no disponible.");
     const result=await db.query("SELECT id,name,business_hours FROM salons WHERE id=$1 AND public_booking_enabled=true FOR SHARE",[id]);
@@ -24,13 +24,17 @@ export function registerPublicBooking({app,pool,auth,validBusinessHours,withinBu
     if(!row || !validBusinessHours(row.business_hours)) throw fail(404,"Este salón todavía no acepta reservas en línea.");
     return row;
   }
-  async function availability(db,id,serviceId,professionalId,date) {
+  async function availability(db,id,serviceId,professionalId,date,excludeAppointmentId=null,durationOverride=null) {
     const shop=await salon(db,id);
     if(!uuid(serviceId) || (professionalId && !uuid(professionalId)) || (typeof date!=="string" || !/^\d{4}-\d{2}-\d{2}$/.test(date))) throw fail(400,"Selecciona servicio, profesional y fecha.");
     const parsed=new Date(date+"T12:00:00Z");
     if(Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0,10)!==date || parsed.getTime()<Date.now()-86400000 || parsed.getTime()>Date.now()+90*86400000) throw fail(400,"Elige una fecha entre hoy y los próximos 90 días.");
     const service=(await db.query("SELECT id,name,duration_minutes,price_label FROM services WHERE id=$1 AND salon_id=$2 AND active=true FOR SHARE",[serviceId,id])).rows[0];
     if(!service || !Number.isInteger(service.duration_minutes) || service.duration_minutes<1 || service.duration_minutes>1440) throw fail(400,"Servicio no disponible.");
+    if(durationOverride!==null){
+      if(!Number.isFinite(durationOverride)||durationOverride<1||durationOverride>1440)throw fail(409,"Contacta con el salón para cambiar esta cita.");
+      service.duration_minutes=durationOverride;
+    }
     const team=(await db.query("SELECT id,weekly_hours FROM professionals WHERE salon_id=$1 AND active=true AND ($2::uuid IS NULL OR id=$2) FOR SHARE",[id,professionalId||null])).rows;
     if(professionalId && !team.length)throw fail(400,"Profesional no disponible.");
     const closures=(await db.query("SELECT professional_id,((starts_on::timestamp+COALESCE(starts_minute,0)*INTERVAL '1 minute') AT TIME ZONE $3) AS starts_at,((ends_on::timestamp+COALESCE(ends_minute,1440)*INTERVAL '1 minute') AT TIME ZONE $3) AS ends_at FROM salon_closures WHERE salon_id=$1 AND active=true AND starts_on<=$2::date AND ends_on>=$2::date",[id,date,shop.business_hours.timezone])).rows;
@@ -50,9 +54,9 @@ export function registerPublicBooking({app,pool,auth,validBusinessHours,withinBu
         INTERVAL '15 minutes') slot
       WHERE slot > NOW() + INTERVAL '30 minutes'
       AND NOT EXISTS (SELECT 1 FROM appointments a WHERE a.salon_id=$6
-        AND a.status<>'cancelled' AND a.starts_at < slot + $5 * INTERVAL '1 minute' AND a.ends_at>slot
+        AND ($8::uuid IS NULL OR a.id<>$8) AND a.status<>'cancelled' AND a.starts_at < slot + $5 * INTERVAL '1 minute' AND a.ends_at>slot
         AND ($7::uuid IS NULL OR a.professional_id=$7 OR a.professional_id IS NULL))
-      ORDER BY slot`,[date,day.start,day.end,shop.business_hours.timezone,service.duration_minutes,id,professionalId||null]);
+      ORDER BY slot`,[date,day.start,day.end,shop.business_hours.timezone,service.duration_minutes,id,professionalId||null,excludeAppointmentId]);
     return {shop,service,slots:rows.rows.map(row=>new Date(row.starts_at)).filter(start=>!blocked(null,start,new Date(start.getTime()+service.duration_minutes*60000)) && withinBusinessHours(shop.business_hours,start,new Date(start.getTime()+service.duration_minutes*60000)) && (!team.length || team.some(member=>works(member,start,new Date(start.getTime()+service.duration_minutes*60000)))))};
   }
   app.get("/reservar/:id",(_req,res)=>res.sendFile("booking.html",{root:process.cwd()}));
