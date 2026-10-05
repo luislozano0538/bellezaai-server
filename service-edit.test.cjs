@@ -3,7 +3,8 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const vm=require('node:vm');
 const source=fs.readFileSync(__dirname+'/server.js','utf8');
-const route=source.slice(source.indexOf('app.patch("/api/services/:id"'),source.indexOf('app.post("/api/appointments"'));
+const start=source.indexOf('app.patch("/api/services/:id"');
+const route=source.slice(start,source.indexOf('app.patch("/api/services/:id/availability"',start));
 async function run(body, rows) {
  let handler, queries=[];
  vm.runInNewContext(route,{app:{patch:(path,auth,fn)=>handler=fn},auth(){},console,
