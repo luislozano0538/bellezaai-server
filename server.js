@@ -9,6 +9,7 @@ import OpenAI from "openai";
 import { registerClosures, appointmentIsClosed } from "./closures.js";
 import { registerSalonProfile } from "./salon-profile.js";
 import { registerPublicBooking } from "./public-booking.js";
+import { registerStaffAccess } from "./staff-access.js";
 
 const { Pool } = pg;
 const app = express();
@@ -79,6 +80,12 @@ async function initDatabase() {
     );
 
     ALTER TABLE professionals ADD COLUMN IF NOT EXISTS weekly_hours JSONB;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS professional_id UUID REFERENCES professionals(id) ON DELETE SET NULL;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT true;
+    ALTER TABLE clients ADD COLUMN IF NOT EXISTS created_by_user_id UUID REFERENCES users(id) ON DELETE SET NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_users_professional_unique
+      ON users(professional_id)
+      WHERE professional_id IS NOT NULL;
 
     CREATE TABLE IF NOT EXISTS professional_specialties (
       id UUID PRIMARY KEY,
@@ -214,6 +221,16 @@ function auth(req, res, next) {
   }
 }
 
+function scopedProfessionalId(req, res) {
+  if (req.user.role !== "staff") return null;
+  const id = req.user.professionalId;
+  if (typeof id !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+    res.status(403).json({error:"Esta cuenta de personal no está vinculada a un profesional."});
+    return false;
+  }
+  return id;
+}
+
 app.get("/health", async (_req, res) => {
   try {
     await pool.query("SELECT 1");
@@ -316,8 +333,8 @@ app.post("/api/auth/login", async (req, res) => {
   const { email, password } = req.body || {};
 
   const q = await pool.query(
-    "SELECT * FROM users WHERE email=$1",
-    [String(email || "").toLowerCase()]
+    "SELECT * FROM users WHERE email=$1 AND active=true",
+    [String(email || "").trim().toLowerCase()]
   );
 
   const user = q.rows[0];
@@ -338,7 +355,8 @@ app.post("/api/auth/login", async (req, res) => {
     {
       id: user.id,
       salonId: user.salon_id,
-      role: user.role
+      role: user.role,
+      professionalId: user.professional_id || null
     },
     JWT_SECRET,
     { expiresIn: "7d" }
@@ -1286,6 +1304,7 @@ app.post("/api/messages/send", auth, (_req, res) => {
   });
 });
 
+registerStaffAccess({app,pool,auth});
 registerClosures({app,pool,auth,validBusinessHours});
 registerSalonProfile({app,pool,auth,validBusinessHours});
 registerPublicBooking({app,pool,auth,validBusinessHours,withinBusinessHours,managementSecret:JWT_SECRET});
