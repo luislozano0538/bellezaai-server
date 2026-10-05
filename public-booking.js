@@ -84,11 +84,12 @@ export function registerPublicBooking({app,pool,auth,validBusinessHours,withinBu
   app.get("/api/public/salons/:id",limit,async(req,res)=>{
     try {
       const shop=await salon(pool,req.params.id);
-      const [services,professionals]=await Promise.all([
+      const [services,professionals,profile]=await Promise.all([
         pool.query("SELECT id,name,duration_minutes,price_label FROM services WHERE salon_id=$1 AND active=true ORDER BY name",[shop.id]),
-        pool.query("SELECT id,name FROM professionals WHERE salon_id=$1 AND active=true ORDER BY name",[shop.id])
+        pool.query("SELECT id,name FROM professionals WHERE salon_id=$1 AND active=true ORDER BY name",[shop.id]),
+        pool.query("SELECT public_profile FROM salons WHERE id=$1",[shop.id])
       ]);
-      res.set("Cache-Control","no-store").json({name:shop.name,timezone:shop.business_hours.timezone,hours:shop.business_hours.days.map(day=>({open:day.open,start:day.start,end:day.end})),services:services.rows,professionals:professionals.rows});
+      res.set("Cache-Control","no-store").json({profile:profile.rows[0]?.public_profile||{},name:shop.name,timezone:shop.business_hours.timezone,hours:shop.business_hours.days.map(day=>({open:day.open,start:day.start,end:day.end})),services:services.rows,professionals:professionals.rows});
     }catch(error){res.status(error.status||500).json({error:error.status?error.message:"No se pudo cargar el salón."});}
   });
   app.get("/api/public/salons/:id/slots",limit,async(req,res)=>{
