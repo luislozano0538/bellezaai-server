@@ -1796,5 +1796,79 @@ status.focus({ preventScroll: true });
 })();
 </script>
 
+
+<script>
+(() => {
+  const trigger=document.createElement('button');trigger.type='button';trigger.className='ghost';trigger.textContent='Cierres y días libres';
+  document.querySelector('#settings .pagebar').after(trigger);
+  const modal=document.createElement('div');modal.className='modal';modal.id='closuresModal';
+  modal.innerHTML='<div class="sheet"><div class="sheetbar"><h2>Cierres y días libres</h2><button type="button" class="close" aria-label="Cerrar">×</button></div><p>Bloquea días completos por vacaciones, festivos o ausencias. Las citas ya creadas se conservan para que puedas revisarlas.</p><p id="closuresStatus" role="status"></p><p id="closuresZone" class="small"></p><form id="closuresForm" class="form"><label>Bloquear para<select name="professionalId"><option value="">Todo el salón</option></select></label><label>Desde<input name="startsOn" type="date" required></label><label>Hasta (incluido)<input name="endsOn" type="date" required></label><label>Motivo interno (opcional)<input name="reason" maxlength="200" placeholder="Vacaciones, festivo…"></label><button type="submit" class="primary">Guardar bloqueo</button></form><h3>Bloqueos vigentes y próximos</h3><div id="closuresList"></div><button type="button" class="ghost" id="closuresRefresh">Actualizar lista</button></div>';
+  document.querySelector('.app').append(modal);
+  const form=modal.querySelector('form'),status=modal.querySelector('#closuresStatus'),list=modal.querySelector('#closuresList');
+  let busy=false,version=0,pending=null;
+  async function api(path,method='GET',body){
+    const token=localStorage.getItem('bellezaAIToken');if(!token)throw Error('Inicia sesión para gestionar cierres.');
+    const response=await fetch('/api/'+path,{method,headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},...(body?{body:JSON.stringify(body)}:{})});
+    const data=await response.json();
+    if(token!==localStorage.getItem('bellezaAIToken'))throw Error('La sesión cambió.');
+    if(!response.ok)throw Error(data.error||'No se pudo completar la operación.');return data;
+  }
+  function lock(value){busy=value;modal.querySelectorAll('button,input,select').forEach(control=>control.disabled=value);}
+  const labelDate=value=>new Intl.DateTimeFormat('es',{timeZone:'UTC',dateStyle:'medium'}).format(new Date(value+'T12:00:00Z'));
+  async function load(){
+    const current=++version;status.textContent='Cargando cierres…';
+    try{
+      const [data,team]=await Promise.all([api('salon/closures'),api('professionals')]);if(current!==version)return;
+      const select=form.elements.namedItem('professionalId'),selection=select.value;
+      select.replaceChildren(new Option('Todo el salón',''));team.filter(person=>person.active).forEach(person=>select.add(new Option(person.name,person.id)));if([...select.options].some(option=>option.value===selection))select.value=selection;
+      modal.querySelector('#closuresZone').textContent=data.timezone?'Fechas en la zona horaria del salón: '+data.timezone:'Configura primero el horario del salón en Ajustes.';
+      if(data.timezone){
+        const today=new Intl.DateTimeFormat('en-CA',{timeZone:data.timezone,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+        form.elements.namedItem('startsOn').min=today;form.elements.namedItem('endsOn').min=today;
+      }
+      list.replaceChildren();
+      data.closures.forEach(row=>{
+        const card=document.createElement('div');card.className='item';
+        const info=document.createElement('div');info.className='grow';
+        const name=document.createElement('b');name.textContent=row.professional_id?(row.professional_name||'Profesional'):'Todo el salón';
+        const dates=document.createElement('p');dates.textContent=labelDate(row.starts_on)+(row.ends_on!==row.starts_on?' – '+labelDate(row.ends_on):'');
+        const reason=document.createElement('p');reason.className='small';reason.textContent=row.reason||'Sin motivo indicado';info.append(name,dates,reason);
+        const remove=document.createElement('button');remove.type='button';remove.className='ghost';remove.textContent='Quitar bloqueo';
+        remove.onclick=async()=>{
+          if(busy)return;lock(true);status.textContent='Quitando bloqueo…';
+          try{await api('salon/closures/'+encodeURIComponent(row.id),'PATCH',{active:false});await load();status.textContent='Bloqueo quitado. Las fechas vuelven a depender del horario y las citas existentes.';}
+          catch(error){status.textContent=error.message;}finally{lock(false);}
+        };
+        card.append(info,remove);list.append(card);
+      });
+      if(!data.closures.length)list.textContent='No hay cierres vigentes ni próximos.';
+      status.textContent='';
+    }catch(error){if(current===version)status.textContent=error.message;}
+  }
+  form.elements.namedItem('startsOn').onchange=()=>{
+    const start=form.elements.namedItem('startsOn').value,end=form.elements.namedItem('endsOn');
+    if(!end.value||end.value<start)end.value=start;
+    if(start)end.min=start;
+  };
+  form.onsubmit=async event=>{
+    event.preventDefault();if(busy)return;
+    const values=Object.fromEntries(new FormData(form));values.professionalId=values.professionalId||null;values.reason=values.reason.trim();
+    if(values.endsOn<values.startsOn){status.textContent='La fecha final debe ser igual o posterior al inicio.';return;}
+    const fingerprint=JSON.stringify(values);
+    if(pending?.fingerprint!==fingerprint)pending={fingerprint,id:crypto.randomUUID()};
+    lock(true);status.textContent='Guardando bloqueo…';
+    try{
+      const saved=await api('salon/closures','POST',{...values,requestId:pending.id});
+      pending=null;form.reset();await load();
+      status.textContent=saved.affectedAppointments?'Bloqueo guardado. Hay '+saved.affectedAppointments+' cita(s) existente(s) en esas fechas: revísalas en Citas.':'Bloqueo guardado. Esas fechas ya no aceptan nuevas reservas para la selección indicada.';
+    }catch(error){status.textContent=error.message;}finally{lock(false);}
+  };
+  trigger.onclick=()=>{if(busy)return;form.reset();pending=null;openModal('closuresModal');load();};
+  modal.querySelector('.close').onclick=()=>{if(!busy){version++;closeModal('closuresModal');}};
+  modal.onclick=event=>{if(event.target===modal&&!busy){version++;closeModal('closuresModal');}};
+  modal.querySelector('#closuresRefresh').onclick=()=>{if(!busy)load();};
+})();
+</script>
+
 </body>
 </html>
