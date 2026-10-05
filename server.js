@@ -7,6 +7,7 @@ import jwt from "jsonwebtoken";
 import pg from "pg";
 import OpenAI from "openai";
 import { registerClosures, appointmentIsClosed } from "./closures.js";
+import { registerSalonProfile } from "./salon-profile.js";
 import { registerPublicBooking } from "./public-booking.js";
 
 const { Pool } = pg;
@@ -30,6 +31,7 @@ async function initDatabase() {
     );
 
     ALTER TABLE salons ADD COLUMN IF NOT EXISTS business_hours JSONB;
+    ALTER TABLE salons ADD COLUMN IF NOT EXISTS public_profile JSONB;
     ALTER TABLE salons ADD COLUMN IF NOT EXISTS public_booking_enabled BOOLEAN NOT NULL DEFAULT false;
 
     CREATE TABLE IF NOT EXISTS users (
@@ -1285,6 +1287,7 @@ app.post("/api/messages/send", auth, (_req, res) => {
 });
 
 registerClosures({app,pool,auth,validBusinessHours});
+registerSalonProfile({app,pool,auth});
 registerPublicBooking({app,pool,auth,validBusinessHours,withinBusinessHours,managementSecret:JWT_SECRET});
 
 async function start() {
