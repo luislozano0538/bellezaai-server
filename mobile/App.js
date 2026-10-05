@@ -19,6 +19,7 @@ import SalonManagement from "./SalonManagement";
 import EditAppointment from "./EditAppointment";
 import SalonSettings from "./SalonSettings";
 import PublicProfileSettings from "./PublicProfileSettings";
+import ClientDetails from "./ClientDetails";
 
 const TOKEN_KEY = "bellezaai_token";
 const API_URL = String(process.env.EXPO_PUBLIC_API_URL || "https://bellezaai-server.onrender.com").replace(/\/$/, "");
@@ -356,7 +357,7 @@ function Appointments({ token, logout, onEdit }) {
   );
 }
 
-function Clients({ token, logout }) {
+function Clients({ token, logout, onSelect }) {
   const [items, setItems] = useState([]);
   const [notice, setNotice] = useState("Cargando clientes…");
   const [showForm, setShowForm] = useState(false);
@@ -434,12 +435,17 @@ function Clients({ token, logout }) {
       )}
 
       {items.map(item => (
-        <View key={item.id} style={styles.card}>
+        <Pressable
+          key={item.id}
+          onPress={() => onSelect(item)}
+          style={({ pressed }) => [styles.card, pressed && styles.pressed]}
+        >
           <Text style={styles.rowTitle}>{item.name}</Text>
           {!!item.phone && <Text style={styles.muted}>{item.phone}</Text>}
           {!!item.email && <Text style={styles.muted}>{item.email}</Text>}
           <Text style={styles.muted}>{item.appointment_count || 0} cita(s)</Text>
-        </View>
+          <Text style={styles.link}>Ver y editar cliente</Text>
+        </Pressable>
       ))}
       {!items.length && !notice && <Text style={styles.muted}>No hay clientes guardados.</Text>}
     </ScrollView>
@@ -449,21 +455,26 @@ function Clients({ token, logout }) {
 function Shell({ token, logout }) {
   const [tab, setTab] = useState("home");
   const [editingAppointment, setEditingAppointment] = useState(null);
+  const [selectedClient, setSelectedClient] = useState(null);
   function editAppointment(item) { setEditingAppointment(item); setTab("editAppointment"); }
   function finishEditing() { setEditingAppointment(null); setTab("appointments"); }
+  function openClient(item) { setSelectedClient(item); setTab("clientDetails"); }
+  function closeClient() { setSelectedClient(null); setTab("clients"); }
+  function updateSelectedClient(item) { setSelectedClient(current => current ? { ...current, ...item } : item); }
   return (
     <SafeAreaView style={styles.flex}>
       <StatusBar barStyle="dark-content" />
       <View style={styles.flex}>
         {tab === "home" && <Home token={token} logout={logout} navigate={setTab} />}
         {tab === "appointments" && <Appointments token={token} logout={logout} onEdit={editAppointment} />}
-        {tab === "clients" && <Clients token={token} logout={logout} />}
+        {tab === "clients" && <Clients token={token} logout={logout} onSelect={openClient} />}
         {tab === "create" && <CreateAppointment token={token} request={api} logout={logout} onCreated={() => setTab("appointments")} />}
         {tab === "assistant" && <AssistantScreen token={token} request={api} logout={logout} />}
         {tab === "management" && <SalonManagement token={token} request={api} logout={logout} goBack={() => setTab("home")} />}
         {tab === "editAppointment" && editingAppointment && <EditAppointment token={token} request={api} logout={logout} appointment={editingAppointment} onSaved={finishEditing} onCancel={finishEditing} />}
         {tab === "salonSettings" && <SalonSettings token={token} request={api} logout={logout} baseUrl={API_URL} goBack={() => setTab("home")} />}
         {tab === "publicProfile" && <PublicProfileSettings token={token} request={api} logout={logout} baseUrl={API_URL} goBack={() => setTab("home")} />}
+        {tab === "clientDetails" && selectedClient && <ClientDetails token={token} request={api} logout={logout} client={selectedClient} onBack={closeClient} onSaved={updateSelectedClient} />}
       </View>
       <View style={styles.nav}>
         {[
