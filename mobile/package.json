@@ -7,7 +7,12 @@
     "start": "expo start",
     "ios": "expo start --ios",
     "android": "expo start --android",
-    "check": "npx expo-doctor"
+    "check": "npx expo-doctor",
+    "eas:whoami": "npx eas-cli whoami",
+    "eas:init": "npx eas-cli init",
+    "device:ios": "npx eas-cli device:create",
+    "build:ios:preview": "npx eas-cli build --platform ios --profile preview",
+    "build:ios:production": "npx eas-cli build --platform ios --profile production"
   },
   "dependencies": {
     "expo": "~57.0.23",
