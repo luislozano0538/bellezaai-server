@@ -10,7 +10,7 @@
 <section class="card"><h2>1. Elige tu servicio</h2><p class="muted">Compara los servicios y elige el que quieres reservar.</p><input id="service" type="hidden"><div id="serviceCards" class="service-cards" role="group" aria-label="Servicios disponibles"></div><p id="serviceInfo" class="muted" role="status"></p><label for="professional">Profesional</label><select id="professional"></select></section>
 <section class="card"><h2>2. Encuentra tu horario</h2><p id="timezone" class="muted"></p><label for="date">Día de tu cita</label><input id="date" type="date" required><p class="muted">Reservas con al menos 30 minutos de anticipación, hasta 90 días.</p><button type="button" id="findSlots">Ver horarios disponibles</button> <button type="button" id="findNext">Buscar la próxima cita disponible</button> <button type="button" id="stopSearch" hidden>Detener búsqueda</button><p class="muted">La búsqueda recorre hasta 14 días desde la fecha elegida, con el servicio y profesional seleccionados.</p><p id="slotNotice" role="status"></p><div id="slots" class="slots"></div></section>
 <section class="card"><h2>3. Tus datos</h2><label for="name">Nombre</label><input id="name" autocomplete="name" maxlength="120" required><label for="phone">Teléfono de contacto</label><input id="phone" type="tel" autocomplete="tel" maxlength="30" required><label for="email">Correo (opcional)</label><input id="email" type="email" autocomplete="email" maxlength="254"><label class="offscreen" aria-hidden="true">Página web<input id="website" tabindex="-1" autocomplete="off"></label><p class="muted">Tus datos se entregan a este salón para gestionar la cita.</p><div id="summary">Elige un horario para revisar tu reserva.</div><button class="primary" id="submitBooking" disabled>Confirmar reserva</button><p class="muted">No se realiza ningún cobro en esta página.</p></section></form>
-<section class="card" id="confirmation" hidden><h2>Tu cita está confirmada</h2><p id="confirmedDetails" style="white-space:pre-line"></p><p id="reference"></p><button type="button" id="saveCalendar" hidden>Guardar en mi calendario</button><p id="calendarHelp" class="muted" hidden>Descarga el archivo y ábrelo en tu calendario. Si la cita cambia o se cancela, actualiza también tu calendario: esta copia no se sincroniza automáticamente.</p><p class="muted">Guarda esta confirmación. No se ha enviado un mensaje ni se ha realizado un cobro. Para cambios o cancelaciones, contacta directamente con el salón.</p></section>
+<section class="card" id="confirmation" hidden><h2 id="confirmationTitle">Tu cita está confirmada</h2><p id="confirmedDetails" style="white-space:pre-line"></p><p id="reference"></p><button type="button" id="saveCalendar" hidden>Guardar en mi calendario</button><p id="calendarHelp" class="muted" hidden>Descarga el archivo y ábrelo en tu calendario. Si la cita cambia o se cancela, actualiza también tu calendario: esta copia no se sincroniza automáticamente.</p><p><a id="manageBooking">Consultar o cancelar mi reserva</a></p><label for="privateLink">Tu enlace privado</label><input id="privateLink" readonly><button type="button" id="copyLink">Copiar enlace privado</button><p id="copyNotice" role="status"></p><p class="muted">Guarda este enlace: permite consultar y cancelar tu cita antes de su inicio, durante un máximo de 180 días. No lo compartas. No se ha enviado un mensaje ni se ha realizado un cobro. Para otros cambios, contacta con el salón.</p></section>
 </main><script>
 (() => {
   const $=id=>document.getElementById(id);
@@ -41,6 +41,10 @@
       'DESCRIPTION:'+escapeText('Reserva confirmada. Referencia: '+event.reference+'\nZona horaria del salón: '+event.timezone+'\nPara cambios o cancelaciones, contacta con el salón. Esta copia no se actualiza automáticamente.'),
       'STATUS:CONFIRMED','END:VEVENT','END:VCALENDAR'].map(fold).join('\r\n')+'\r\n';
   }
+  $('copyLink').onclick=async()=>{
+    try{await navigator.clipboard.writeText($('privateLink').value);$('copyNotice').textContent='Enlace copiado. Guárdalo en un lugar privado.';}
+    catch{$('privateLink').focus();$('privateLink').select();$('copyNotice').textContent='Selecciona y copia este enlace para guardarlo.';}
+  };
   let calendarEvent=null;
   $('saveCalendar').onclick=()=>{
     if(!calendarEvent)return;
@@ -102,7 +106,7 @@
   $('bookingForm').onsubmit=async event=>{
     event.preventDefault();if(busy||!selected)return;
     const payload={name:$('name').value.trim(),phone:$('phone').value.trim(),email:$('email').value.trim(),website:$('website').value,serviceId:$('service').value,professionalId:$('professional').value||null,startsAt:selected,date:$('date').value};
-    const details=summary(), bookedService={...service()};busy=true;
+    busy=true;
     const controls=[...$('bookingForm').querySelectorAll('input,select,button')];controls.forEach(el=>el.disabled=true);$('notice').textContent='Confirmando tu reserva…';
     try {
       const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(payload)));
@@ -112,11 +116,16 @@
       payload.requestId=saved?.hash===hash?saved.requestId:crypto.randomUUID();
       sessionStorage.setItem(key,JSON.stringify({hash,requestId:payload.requestId}));
       const result=await api('/bookings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-      $('bookingForm').hidden=true;$('confirmation').hidden=false;$('confirmedDetails').textContent=details;$('reference').textContent='Referencia: '+result.reference;$('notice').textContent='';
-      calendarEvent={reference:result.reference,createdAt:new Date().toISOString(),startsAt:payload.startsAt,
-        endsAt:new Date(new Date(payload.startsAt).getTime()+Number(bookedService.duration_minutes)*60000).toISOString(),
-        service:bookedService.name,salon:catalog.name,timezone:catalog.timezone};
-      $('saveCalendar').hidden=false;$('calendarHelp').hidden=false;
+      $('bookingForm').hidden=true;$('confirmation').hidden=false;
+      const states={confirmed:'Tu cita está confirmada',cancelled:'Esta cita está cancelada',completed:'Esta cita está completada',no_show:'Esta cita figura como no asistida'};
+      $('confirmationTitle').textContent=states[result.status]||'Tu reserva';
+      $('confirmedDetails').textContent=result.salonName+'\n'+result.serviceName+' · '+Math.round((new Date(result.endsAt)-new Date(result.startsAt))/60000)+' minutos · '+(result.price||'Consultar precio')+'\n'+result.professionalName+'\n'+new Intl.DateTimeFormat('es',{timeZone:result.timezone,dateStyle:'full',timeStyle:'short'}).format(new Date(result.startsAt))+'\nZona horaria: '+result.timezone;
+      $('reference').textContent='Referencia: '+result.reference;$('notice').textContent='';
+      const privateUrl=new URL(result.managePath,location.origin);
+      $('manageBooking').href=privateUrl.href;$('privateLink').value=privateUrl.href;
+      calendarEvent={reference:result.reference,createdAt:new Date().toISOString(),startsAt:result.startsAt,
+        endsAt:result.endsAt,service:result.serviceName,salon:result.salonName,timezone:result.timezone};
+      $('saveCalendar').hidden=result.status!=='confirmed';$('calendarHelp').hidden=result.status!=='confirmed';
       window.scrollTo({top:0,behavior:'smooth'});
     }catch(error){$('notice').textContent=error.message;}
     finally{busy=false;controls.forEach(el=>el.disabled=false);$('submitBooking').disabled=!selected;}
