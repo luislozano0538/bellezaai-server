@@ -709,7 +709,7 @@ translate();renderHome();renderAppointments();renderCustomers();
 
   const button = document.createElement('button');
   button.type = 'button';
-  button.textContent = 'Mis servicios';
+  button.textContent = 'Mis servicios';button.id='servicesSetupButton';
   button.style.cssText =
     'margin:12px;padding:12px 18px;border:0;border-radius:12px;' +
     'background:#743b7d;color:white;font-weight:bold';
@@ -1618,7 +1618,7 @@ status.focus({ preventScroll: true });
 <script>
 (() => {
   const trigger = document.createElement('button');
-  trigger.type='button';trigger.className='primary';trigger.textContent='Gestionar equipo';
+  trigger.type='button';trigger.className='primary';trigger.textContent='Gestionar equipo';trigger.id='teamSetupButton';
   document.querySelector('#settings .pagebar').after(trigger);
   const modal=document.createElement('div');modal.id='teamModal';modal.className='modal';
   modal.innerHTML='<div class="sheet"><div class="sheetbar"><h2>Equipo del salón</h2><button class="close" type="button" aria-label="Cerrar equipo">×</button></div><p>El propietario puede crear y editar profesionales. Asígnalos al crear o reprogramar una cita.</p><p id="teamStatus" role="status"></p><div id="teamList"></div><h3 id="teamFormTitle">Nuevo profesional</h3><form id="teamForm" class="form"><label>Nombre<input name="name" required maxlength="120"></label><label>Teléfono<input name="phone" type="tel" maxlength="60"></label><label>Correo<input name="email" type="email" maxlength="254"></label><button class="primary" type="submit">Guardar profesional</button><button class="ghost" type="button" id="teamReset">Nuevo / Cancelar edición</button></form></div>';
@@ -1889,7 +1889,7 @@ status.focus({ preventScroll: true });
 
 <script>
 (()=>{
- const trigger=document.createElement('button');trigger.type='button';trigger.className='ghost';trigger.textContent='Página pública del salón';document.querySelector('#settings .pagebar').after(trigger);
+ const trigger=document.createElement('button');trigger.type='button';trigger.className='ghost';trigger.textContent='Página pública del salón';trigger.id='profileSetupButton';document.querySelector('#settings .pagebar').after(trigger);
  const modal=document.createElement('div');modal.className='modal';modal.id='profileModal';
  modal.innerHTML='<div class="sheet"><div class="sheetbar"><h2>Página pública del salón</h2><button type="button" class="close" aria-label="Cerrar">×</button></div><p>Estos datos serán visibles en tu página de reservas cuando esté habilitada. Todos los campos son opcionales.</p><p id="profileStatus" role="status"></p><form id="profileForm" class="form"><label>Sobre el salón<textarea name="description" maxlength="1200" rows="4" placeholder="Cuenta qué ofreces y qué hace especial a tu salón"></textarea></label><label>Dirección pública<textarea name="address" maxlength="300" rows="2" placeholder="Calle, número, ciudad y código postal"></textarea></label><label>Teléfono del salón<input name="phone" type="tel" maxlength="30" placeholder="Número para consultas"></label><label>Fotos del salón (hasta 3)<input name="photos" type="file" accept="image/jpeg,image/png,image/webp" multiple></label><p class="small">Usa fotos que tengas permiso de publicar. JPG, PNG o WebP, hasta 10 MB por foto. Las nuevas fotos se añaden a las que ya guardaste.</p><div id="profilePhotos"></div><button class="primary" type="submit">Guardar presentación pública</button></form><p><a id="profileLink" target="_blank" rel="noopener">Abrir página de reservas</a></p></div>';
  document.querySelector('.app').append(modal);
@@ -1951,6 +1951,51 @@ status.focus({ preventScroll: true });
  trigger.onclick=()=>{if(busy)return;form.reset();photos=[];renderPhotos();modal.querySelector('#profileLink').removeAttribute('href');openModal('profileModal');load();};
  modal.querySelector('.close').onclick=()=>{if(!busy){version++;closeModal('profileModal');}};
  modal.onclick=event=>{if(event.target===modal&&!busy){version++;closeModal('profileModal');}};
+})();
+</script>
+
+<script>
+(()=>{
+ const button=document.createElement('button');button.type='button';button.className='ghost';button.textContent='Preparar mi salón';button.style.margin='12px';document.querySelector('#home').prepend(button);
+ const settingsButton=button.cloneNode(true);document.querySelector('#settings .pagebar').after(settingsButton);
+ const modal=document.createElement('div');modal.className='modal';modal.id='setupModal';
+ modal.innerHTML='<div class="sheet"><div class="sheetbar"><h2>Preparar mi salón</h2><button type="button" class="close" aria-label="Cerrar">×</button></div><p>Tu progreso se calcula con los datos guardados. Completa lo pendiente y vuelve aquí para actualizarlo.</p><p id="setupStatus" role="status"></p><div id="setupItems"></div><button id="setupRefresh" type="button" class="ghost">Actualizar progreso</button><p><a id="setupPublic" target="_blank" rel="noopener" hidden>Abrir página de reservas</a></p></div>';
+ document.querySelector('.app').append(modal);let version=0;
+ const status=modal.querySelector('#setupStatus'),list=modal.querySelector('#setupItems'),refresh=modal.querySelector('#setupRefresh'),link=modal.querySelector('#setupPublic');
+ function go(id){
+  closeModal('setupModal');version++;
+  showView('settings');
+  const buttons={services:'servicesSetupButton',team:'teamSetupButton',description:'profileSetupButton',address:'profileSetupButton',phone:'profileSetupButton',photos:'profileSetupButton'};
+  if(buttons[id])document.getElementById(buttons[id]).click();
+  else{
+   const target=document.getElementById(id==='name'?'salonNameInput':id==='hours'?'hoursTimezone':'publicRefresh');
+   target.scrollIntoView({behavior:'smooth',block:'center'});target.focus();if(id==='published')target.click();
+  }
+ }
+ async function load(){
+  const current=++version,token=localStorage.getItem('bellezaAIToken');
+  list.replaceChildren();link.hidden=true;refresh.disabled=true;status.textContent='Consultando configuración…';
+  try{
+   if(!token)throw Error('Inicia sesión para ver la configuración de tu salón.');
+   const response=await fetch('/api/salon/setup',{headers:{Authorization:'Bearer '+token},cache:'no-store'}),data=await response.json();
+   if(current!==version)return;if(token!==localStorage.getItem('bellezaAIToken'))throw Error('La sesión cambió. Vuelve a abrir la guía.');
+   if(!response.ok)throw Error(data.error||'No se pudo cargar la configuración.');
+   const required=data.items.filter(item=>item.required),done=required.filter(item=>item.complete).length;
+   status.textContent=done+' de '+required.length+' pasos necesarios completos. '+(data.ready?'Configuración básica lista para recibir reservas; los horarios disponibles dependen de tu agenda.':'Completa los pasos necesarios para habilitar las reservas.')+(data.owner?'':' El propietario puede modificar esta configuración.');
+   data.items.forEach(item=>{
+    const row=document.createElement('div');row.className='item';const info=document.createElement('div');info.className='grow';
+    const title=document.createElement('b');title.textContent=(item.complete?'✓ ':item.required?'Pendiente: ':'Opcional: ')+item.label;
+    const detail=document.createElement('p');detail.className='small';detail.textContent=item.detail;info.append(title,detail);row.append(info);
+    if(data.owner){const action=document.createElement('button');action.type='button';action.className='ghost';action.textContent=item.complete?'Revisar':'Configurar';action.setAttribute('aria-label',action.textContent+' '+item.label);action.onclick=()=>go(item.id);row.append(action);}
+    list.append(row);
+   });
+   link.href=data.path;link.hidden=!data.ready;
+  }catch(error){if(current===version)status.textContent=error.message;}
+  finally{if(current===version)refresh.disabled=false;}
+ }
+ button.onclick=settingsButton.onclick=()=>{openModal('setupModal');load();};
+ refresh.onclick=load;modal.querySelector('.close').onclick=()=>{version++;closeModal('setupModal');};
+ modal.onclick=event=>{if(event.target===modal){version++;closeModal('setupModal');}};
 })();
 </script>
 
