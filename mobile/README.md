@@ -18,3 +18,16 @@ Primera base móvil de BellezaAI para iPhone y Android usando Expo/React Native.
 4. Ejecuta `npm start`.
 
 No se guardan claves de OpenAI ni secretos del servidor dentro de la app móvil.
+
+
+## Compilar para instalar
+La configuración `eas.json` incluye:
+- `preview`: distribución interna para probar una compilación.
+- `production`: compilación para App Store / Google Play con incremento automático de versión.
+
+Después de vincular el proyecto a una cuenta de Expo/EAS:
+- iPhone: `eas build --platform ios --profile preview`
+- Android: `eas build --platform android --profile preview`
+- Producción: `eas build --platform all --profile production`
+
+La publicación final requiere las cuentas y credenciales de Apple/Google correspondientes.
