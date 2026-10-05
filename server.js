@@ -6,6 +6,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import pg from "pg";
 import OpenAI from "openai";
+import { registerClosures, appointmentIsClosed } from "./closures.js";
 import { registerPublicBooking } from "./public-booking.js";
 
 const { Pool } = pg;
@@ -111,6 +112,18 @@ async function initDatabase() {
     ALTER TABLE appointments ADD COLUMN IF NOT EXISTS price_label_snapshot TEXT;
     UPDATE appointments a SET price_label_snapshot=COALESCE(s.price_label,'')
       FROM services s WHERE a.service_id=s.id AND a.salon_id=s.salon_id AND a.price_label_snapshot IS NULL;
+
+    CREATE TABLE IF NOT EXISTS salon_closures (
+      id UUID PRIMARY KEY,
+      salon_id UUID NOT NULL REFERENCES salons(id) ON DELETE CASCADE,
+      professional_id UUID REFERENCES professionals(id) ON DELETE CASCADE,
+      starts_on DATE NOT NULL,
+      ends_on DATE NOT NULL CHECK (ends_on >= starts_on),
+      reason TEXT NOT NULL DEFAULT '',
+      active BOOLEAN NOT NULL DEFAULT true,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_closures_salon_dates ON salon_closures(salon_id,starts_on,ends_on) WHERE active=true;
 
     CREATE TABLE IF NOT EXISTS public_booking_requests (
       salon_id UUID NOT NULL REFERENCES salons(id) ON DELETE CASCADE,
@@ -828,6 +841,7 @@ app.post("/api/appointments", auth, async (req, res) => {
       start.getTime() + service.rows[0].duration_minutes * 60000
     );
 
+    if(await appointmentIsClosed(db,req.user.salonId,professionalId,start,end))return res.status(409).json({error:"La fecha está bloqueada por un cierre o día libre. Elige otra fecha."});
     if (!await professionalWorks(db,req.user.salonId,professionalId,start,end)) {
       return res.status(409).json({error:"La cita queda fuera del horario de trabajo del profesional. Elige otra hora o profesional."});
     }
@@ -969,6 +983,7 @@ app.patch("/api/appointments/:id", auth, async (req, res) => {
         return res.status(404).json({ error: "Cliente o servicio no encontrado en tu salón." });
       }
       const end = new Date(start.getTime() + service.rows[0].duration_minutes * 60000);
+      if(await appointmentIsClosed(db,req.user.salonId,professionalId,start,end))return res.status(409).json({error:"La fecha está bloqueada por un cierre o día libre. Elige otra fecha."});
       if (!await professionalWorks(db,req.user.salonId,professionalId,start,end)) return res.status(409).json({error:"La cita queda fuera del horario de trabajo del profesional. Elige otra hora o profesional."});
       const conflict = await db.query(
         `SELECT id FROM appointments
@@ -1267,6 +1282,7 @@ app.post("/api/messages/send", auth, (_req, res) => {
   });
 });
 
+registerClosures({app,pool,auth,validBusinessHours});
 registerPublicBooking({app,pool,auth,validBusinessHours,withinBusinessHours});
 
 async function start() {
