@@ -8,6 +8,8 @@ on:
       - "mobile/**"
       - "server.js"
       - "staff-access.js"
+      - "*.test.cjs"
+      - "package.json"
       - ".github/workflows/mobile-validation.yml"
   pull_request:
     branches:
@@ -16,6 +18,8 @@ on:
       - "mobile/**"
       - "server.js"
       - "staff-access.js"
+      - "*.test.cjs"
+      - "package.json"
       - ".github/workflows/mobile-validation.yml"
 
 jobs:
