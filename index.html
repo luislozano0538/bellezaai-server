@@ -1887,5 +1887,72 @@ status.focus({ preventScroll: true });
 })();
 </script>
 
+<script>
+(()=>{
+ const trigger=document.createElement('button');trigger.type='button';trigger.className='ghost';trigger.textContent='Página pública del salón';document.querySelector('#settings .pagebar').after(trigger);
+ const modal=document.createElement('div');modal.className='modal';modal.id='profileModal';
+ modal.innerHTML='<div class="sheet"><div class="sheetbar"><h2>Página pública del salón</h2><button type="button" class="close" aria-label="Cerrar">×</button></div><p>Estos datos serán visibles en tu página de reservas cuando esté habilitada. Todos los campos son opcionales.</p><p id="profileStatus" role="status"></p><form id="profileForm" class="form"><label>Sobre el salón<textarea name="description" maxlength="1200" rows="4" placeholder="Cuenta qué ofreces y qué hace especial a tu salón"></textarea></label><label>Dirección pública<textarea name="address" maxlength="300" rows="2" placeholder="Calle, número, ciudad y código postal"></textarea></label><label>Teléfono del salón<input name="phone" type="tel" maxlength="30" placeholder="Número para consultas"></label><label>Fotos del salón (hasta 3)<input name="photos" type="file" accept="image/jpeg,image/png,image/webp" multiple></label><p class="small">Usa fotos que tengas permiso de publicar. JPG, PNG o WebP, hasta 10 MB por foto. Las nuevas fotos se añaden a las que ya guardaste.</p><div id="profilePhotos"></div><button class="primary" type="submit">Guardar presentación pública</button></form><p><a id="profileLink" target="_blank" rel="noopener">Abrir página de reservas</a></p></div>';
+ document.querySelector('.app').append(modal);
+ const form=modal.querySelector('form'),status=modal.querySelector('#profileStatus'),photosView=modal.querySelector('#profilePhotos');let photos=[],busy=false,loaded=false,version=0;
+ function lock(value){busy=value;modal.querySelectorAll('button,input,textarea').forEach(el=>el.disabled=value);}
+ function renderPhotos(){
+  photosView.replaceChildren();
+  photos.forEach((url,index)=>{
+   const row=document.createElement('div'),img=document.createElement('img'),button=document.createElement('button');
+   img.src=url;img.alt='Foto '+(index+1);img.style.cssText='width:140px;height:100px;object-fit:cover;border-radius:12px';
+   button.type='button';button.textContent='Quitar foto '+(index+1);button.onclick=()=>{if(!busy){photos.splice(index,1);renderPhotos();}};
+   row.append(img,button);photosView.append(row);
+  });
+ }
+ async function api(method,body){
+  const token=localStorage.getItem('bellezaAIToken');if(!token)throw Error('Inicia sesión para editar la página del salón.');
+  const response=await fetch('/api/salon/profile',{method,headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});
+  const data=await response.json();if(token!==localStorage.getItem('bellezaAIToken'))throw Error('La sesión cambió. Abre de nuevo el formulario.');
+  if(!response.ok)throw Error(data.error||'No se pudo completar la solicitud.');return data;
+ }
+ async function load(){
+  const current=++version;loaded=false;lock(true);status.textContent='Cargando presentación…';
+  try{
+   const data=await api('GET');if(current!==version)return;
+   ['description','address','phone'].forEach(name=>form.elements.namedItem(name).value=data.profile[name]||'');
+   photos=[...(data.profile.photos||[])];renderPhotos();loaded=true;
+   modal.querySelector('#profileLink').href=data.path;
+   status.textContent=data.published?'Al guardar, los cambios serán públicos en tu página de reservas.':'La página de reservas aún está desactivada. Puedes preparar aquí su presentación.';
+  }catch(error){status.textContent=error.message;}
+  finally{lock(false);form.querySelector('[type=submit]').disabled=!loaded;}
+ }
+ async function photoData(file){
+  if(!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>10*1024*1024)throw Error('Usa JPG, PNG o WebP de hasta 10 MB.');
+  const url=URL.createObjectURL(file);
+  try{
+   const img=new Image();img.src=url;await img.decode();
+   const scale=Math.min(1,1000/Math.max(img.naturalWidth,img.naturalHeight)),canvas=document.createElement('canvas');
+   canvas.width=Math.max(1,Math.round(img.naturalWidth*scale));canvas.height=Math.max(1,Math.round(img.naturalHeight*scale));
+   const context=canvas.getContext('2d');context.fillStyle='white';context.fillRect(0,0,canvas.width,canvas.height);context.drawImage(img,0,0,canvas.width,canvas.height);
+   for(const quality of [.8,.65,.5,.35]){const data=canvas.toDataURL('image/jpeg',quality);if(data.length<=220000)return data;}
+   throw Error('Esta foto es demasiado grande. Elige una versión más pequeña.');
+  }finally{URL.revokeObjectURL(url);}
+ }
+ form.elements.namedItem('photos').onchange=async event=>{
+  if(busy||!loaded)return;const files=[...event.target.files];
+  if(photos.length+files.length>3){status.textContent='Puedes guardar hasta 3 fotos. Quita alguna antes de añadir más.';event.target.value='';return;}
+  lock(true);status.textContent='Preparando fotos…';
+  try{const added=[];for(const file of files)added.push(await photoData(file));photos.push(...added);renderPhotos();status.textContent='Fotos preparadas. Pulsa Guardar para publicarlas.';}
+  catch(error){status.textContent=error.message;}
+  finally{event.target.value='';lock(false);}
+ };
+ form.onsubmit=async event=>{
+  event.preventDefault();if(busy||!loaded)return;
+  const body={photos};['description','address','phone'].forEach(name=>body[name]=form.elements.namedItem(name).value.trim());
+  lock(true);status.textContent='Guardando presentación…';
+  try{await api('PUT',body);status.textContent='Presentación guardada. Aparecerá en tu página de reservas cuando esté habilitada.';}
+  catch(error){status.textContent=error.message;}finally{lock(false);}
+ };
+ trigger.onclick=()=>{if(busy)return;form.reset();photos=[];renderPhotos();modal.querySelector('#profileLink').removeAttribute('href');openModal('profileModal');load();};
+ modal.querySelector('.close').onclick=()=>{if(!busy){version++;closeModal('profileModal');}};
+ modal.onclick=event=>{if(event.target===modal&&!busy){version++;closeModal('profileModal');}};
+})();
+</script>
+
 </body>
 </html>
