@@ -22,6 +22,7 @@ import PublicProfileSettings from "./PublicProfileSettings";
 import ClientDetails from "./ClientDetails";
 import ClosuresScreen from "./ClosuresScreen";
 import RemindersScreen from "./RemindersScreen";
+import StaffAccessScreen from "./StaffAccessScreen";
 
 const TOKEN_KEY = "bellezaai_token";
 const API_URL = String(process.env.EXPO_PUBLIC_API_URL || "https://bellezaai-server.onrender.com").replace(/\/$/, "");
@@ -153,12 +154,14 @@ function Home({ token, logout, navigate }) {
     setBusy(true);
     setNotice("Actualizando…");
     try {
-      const [dashboard, profile, salon, appts, setup] = await Promise.all([
+      const profile = await api("/api/profile", { token });
+      const [dashboard, salon, appts, setup] = await Promise.all([
         api("/api/dashboard", { token }),
-        api("/api/profile", { token }),
         api("/api/salon", { token }),
         api("/api/appointments", { token }),
-        api("/api/salon/setup", { token })
+        profile.role === "owner"
+          ? api("/api/salon/setup", { token })
+          : Promise.resolve(null)
       ]);
       setData({ dashboard, profile, salon, setup });
       setAppointments(appts);
@@ -176,6 +179,7 @@ function Home({ token, logout, navigate }) {
   const nextAppointments = useMemo(() => appointments
     .filter(item => item.status !== "cancelled" && new Date(item.starts_at) >= new Date())
     .slice(0, 5), [appointments]);
+  const isOwner = data?.profile?.role === "owner";
 
   return (
     <ScrollView contentContainerStyle={styles.screen}>
@@ -196,48 +200,53 @@ function Home({ token, logout, navigate }) {
         <Metric value={data?.dashboard?.pendingReminders ?? "—"} label="Recordatorios" />
       </View>
 
-      <View style={styles.card}>
-        <View style={styles.setupHeader}>
-          <View style={styles.rowGrow}>
-            <Text style={styles.cardTitle}>Preparar mi salón</Text>
-            <Text style={styles.muted}>
-              {data?.setup?.ready
-                ? "Configuración principal lista."
-                : "Completa lo necesario antes de publicar reservas."}
+      {isOwner && (
+        <>
+        <View style={styles.card}>
+          <View style={styles.setupHeader}>
+            <View style={styles.rowGrow}>
+              <Text style={styles.cardTitle}>Preparar mi salón</Text>
+              <Text style={styles.muted}>
+                {data?.setup?.ready
+                  ? "Configuración principal lista."
+                  : "Completa lo necesario antes de publicar reservas."}
+              </Text>
+            </View>
+            <Text style={[styles.setupBadge, data?.setup?.ready && styles.setupBadgeReady]}>
+              {data?.setup?.ready ? "Listo" : "Pendiente"}
             </Text>
           </View>
-          <Text style={[styles.setupBadge, data?.setup?.ready && styles.setupBadgeReady]}>
-            {data?.setup?.ready ? "Listo" : "Pendiente"}
-          </Text>
-        </View>
-
-        {(data?.setup?.items || []).map(item => {
-          const route =
-            item.id === "services" || item.id === "team"
-              ? "management"
-              : item.id === "description" || item.id === "address" || item.id === "phone" || item.id === "photos"
-                ? "publicProfile"
-                : "salonSettings";
-          return (
-            <Pressable
-              key={item.id}
-              onPress={() => navigate(route)}
-              style={styles.setupItem}
-            >
-              <Text style={[styles.setupMark, item.complete && styles.setupMarkDone]}>
-                {item.complete ? "✓" : "○"}
-              </Text>
-              <View style={styles.rowGrow}>
-                <Text style={styles.setupTitle}>
-                  {item.label}{item.required ? "" : " · opcional"}
+  
+          {(data?.setup?.items || []).map(item => {
+            const route =
+              item.id === "services" || item.id === "team"
+                ? "management"
+                : item.id === "description" || item.id === "address" || item.id === "phone" || item.id === "photos"
+                  ? "publicProfile"
+                  : "salonSettings";
+            return (
+              <Pressable
+                key={item.id}
+                onPress={() => navigate(route)}
+                style={styles.setupItem}
+              >
+                <Text style={[styles.setupMark, item.complete && styles.setupMarkDone]}>
+                  {item.complete ? "✓" : "○"}
                 </Text>
-                <Text style={styles.muted}>{item.detail}</Text>
-              </View>
-              <Text style={styles.link}>{item.complete ? "Ver" : "Configurar"}</Text>
-            </Pressable>
-          );
-        })}
-      </View>
+                <View style={styles.rowGrow}>
+                  <Text style={styles.setupTitle}>
+                    {item.label}{item.required ? "" : " · opcional"}
+                  </Text>
+                  <Text style={styles.muted}>{item.detail}</Text>
+                </View>
+                <Text style={styles.link}>{item.complete ? "Ver" : "Configurar"}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+  
+          </>
+      )}
 
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Próximas citas</Text>
@@ -252,15 +261,24 @@ function Home({ token, logout, navigate }) {
         )) : <Text style={styles.muted}>No hay próximas citas.</Text>}
       </View>
 
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Administrar salón</Text>
-        <Text style={styles.muted}>Agrega servicios y profesionales desde el teléfono.</Text>
-        <Button onPress={() => navigate("management")}>Servicios y equipo</Button>
-        <Button secondary onPress={() => navigate("salonSettings")}>Horario y reservas</Button>
-        <Button secondary onPress={() => navigate("publicProfile")}>Perfil público</Button>
-        <Button secondary onPress={() => navigate("closures")}>Bloqueos y días libres</Button>
-        <Button secondary onPress={() => navigate("reminders")}>Recordatorios</Button>
-      </View>
+      {isOwner ? (
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Administrar salón</Text>
+          <Text style={styles.muted}>Configura el negocio y los accesos del equipo.</Text>
+          <Button onPress={() => navigate("management")}>Servicios y equipo</Button>
+          <Button secondary onPress={() => navigate("staffAccess")}>Accesos del equipo</Button>
+          <Button secondary onPress={() => navigate("salonSettings")}>Horario y reservas</Button>
+          <Button secondary onPress={() => navigate("publicProfile")}>Perfil público</Button>
+          <Button secondary onPress={() => navigate("closures")}>Bloqueos y días libres</Button>
+          <Button secondary onPress={() => navigate("reminders")}>Recordatorios</Button>
+        </View>
+      ) : (
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Mi agenda</Text>
+          <Text style={styles.muted}>Esta cuenta solo muestra tu agenda, tus clientes relacionados y tus recordatorios.</Text>
+          <Button secondary onPress={() => navigate("reminders")}>Mis recordatorios</Button>
+        </View>
+      )}
 
       <Button secondary onPress={logout}>Cerrar sesión</Button>
     </ScrollView>
@@ -525,6 +543,7 @@ function Shell({ token, logout }) {
         {tab === "clientDetails" && selectedClient && <ClientDetails token={token} request={api} logout={logout} client={selectedClient} onBack={closeClient} onSaved={updateSelectedClient} />}
         {tab === "closures" && <ClosuresScreen token={token} request={api} logout={logout} goBack={() => setTab("home")} />}
         {tab === "reminders" && <RemindersScreen token={token} request={api} logout={logout} goBack={() => setTab("home")} />}
+        {tab === "staffAccess" && <StaffAccessScreen token={token} request={api} logout={logout} goBack={() => setTab("home")} />}
       </View>
       <View style={styles.nav}>
         {[
