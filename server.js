@@ -675,7 +675,7 @@ app.get("/api/clients/:id/history", auth, async (req, res) => {
 app.patch("/api/clients/:id", auth, async (req, res) => {
   const {name, phone = "", email = "", notes} = req.body || {};
   if (notes !== undefined && (typeof notes !== "string" || notes.length > 2000)) return res.status(400).json({error:"Las notas deben tener hasta 2000 caracteres."});
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.params.id) ||
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.params.id) ||
       typeof name !== "string" || !name.trim() || name.trim().length > 120 ||
       typeof phone !== "string" || phone.length > 80 ||
       typeof email !== "string" || email.length > 254 ||
