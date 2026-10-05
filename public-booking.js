@@ -29,7 +29,13 @@ export function registerPublicBooking({app,pool,auth,validBusinessHours,withinBu
     if(Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0,10)!==date || parsed.getTime()<Date.now()-86400000 || parsed.getTime()>Date.now()+90*86400000) throw fail(400,"Elige una fecha entre hoy y los próximos 90 días.");
     const service=(await db.query("SELECT id,name,duration_minutes,price_label FROM services WHERE id=$1 AND salon_id=$2 AND active=true FOR SHARE",[serviceId,id])).rows[0];
     if(!service || !Number.isInteger(service.duration_minutes) || service.duration_minutes<1 || service.duration_minutes>1440) throw fail(400,"Servicio no disponible.");
-    if(professionalId && !(await db.query("SELECT id FROM professionals WHERE id=$1 AND salon_id=$2 AND active=true",[professionalId,id])).rows[0]) throw fail(400,"Profesional no disponible.");
+    const team=(await db.query("SELECT id,weekly_hours FROM professionals WHERE salon_id=$1 AND active=true AND ($2::uuid IS NULL OR id=$2) FOR SHARE",[id,professionalId||null])).rows;
+    if(professionalId && !team.length)throw fail(400,"Profesional no disponible.");
+    const works=(member,start,end)=>{
+      if(member.weekly_hours===null)return true;
+      const hours={timezone:shop.business_hours.timezone,days:member.weekly_hours};
+      return validBusinessHours(hours)&&withinBusinessHours(hours,start,end);
+    };
     const day=shop.business_hours.days[parsed.getUTCDay()];
     if(!day?.open) return {shop,service,slots:[]};
     const rows=await db.query(`
@@ -42,7 +48,7 @@ export function registerPublicBooking({app,pool,auth,validBusinessHours,withinBu
         AND a.status<>'cancelled' AND a.starts_at < slot + $5 * INTERVAL '1 minute' AND a.ends_at>slot
         AND ($7::uuid IS NULL OR a.professional_id=$7 OR a.professional_id IS NULL))
       ORDER BY slot`,[date,day.start,day.end,shop.business_hours.timezone,service.duration_minutes,id,professionalId||null]);
-    return {shop,service,slots:rows.rows.map(row=>new Date(row.starts_at)).filter(start=>withinBusinessHours(shop.business_hours,start,new Date(start.getTime()+service.duration_minutes*60000)))};
+    return {shop,service,slots:rows.rows.map(row=>new Date(row.starts_at)).filter(start=>withinBusinessHours(shop.business_hours,start,new Date(start.getTime()+service.duration_minutes*60000)) && (!team.length || team.some(member=>works(member,start,new Date(start.getTime()+service.duration_minutes*60000)))))};
   }
   app.get("/reservar/:id",(_req,res)=>res.sendFile("booking.html",{root:process.cwd()}));
   app.get("/api/salon/public-booking",auth,async(req,res)=>{
