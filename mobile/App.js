@@ -20,6 +20,7 @@ import EditAppointment from "./EditAppointment";
 import SalonSettings from "./SalonSettings";
 import PublicProfileSettings from "./PublicProfileSettings";
 import ClientDetails from "./ClientDetails";
+import ClosuresScreen from "./ClosuresScreen";
 
 const TOKEN_KEY = "bellezaai_token";
 const API_URL = String(process.env.EXPO_PUBLIC_API_URL || "https://bellezaai-server.onrender.com").replace(/\/$/, "");
@@ -212,6 +213,7 @@ function Home({ token, logout, navigate }) {
         <Button onPress={() => navigate("management")}>Servicios y equipo</Button>
         <Button secondary onPress={() => navigate("salonSettings")}>Horario y reservas</Button>
         <Button secondary onPress={() => navigate("publicProfile")}>Perfil público</Button>
+        <Button secondary onPress={() => navigate("closures")}>Bloqueos y días libres</Button>
       </View>
 
       <Button secondary onPress={logout}>Cerrar sesión</Button>
@@ -475,6 +477,7 @@ function Shell({ token, logout }) {
         {tab === "salonSettings" && <SalonSettings token={token} request={api} logout={logout} baseUrl={API_URL} goBack={() => setTab("home")} />}
         {tab === "publicProfile" && <PublicProfileSettings token={token} request={api} logout={logout} baseUrl={API_URL} goBack={() => setTab("home")} />}
         {tab === "clientDetails" && selectedClient && <ClientDetails token={token} request={api} logout={logout} client={selectedClient} onBack={closeClient} onSaved={updateSelectedClient} />}
+        {tab === "closures" && <ClosuresScreen token={token} request={api} logout={logout} goBack={() => setTab("home")} />}
       </View>
       <View style={styles.nav}>
         {[
