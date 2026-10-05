@@ -1639,7 +1639,63 @@ status.focus({ preventScroll: true });
     if(!response.ok) throw Error(data.error||'No se pudo completar la operación.');
     return data;
   }
-  function reset() {editing=null;form.reset();document.getElementById('teamFormTitle').textContent='Nuevo profesional';}
+
+  const hoursEditor=document.createElement('section');hoursEditor.hidden=true;
+  hoursEditor.innerHTML='<h3 id="staffHoursTitle">Horario del profesional</h3><p id="staffHoursZone" class="small"></p><p>Las reservas públicas deben caber en el horario del salón y del profesional. Las citas existentes se conservan.</p><form id="staffHoursForm" class="form"><label><input type="checkbox" name="inherit" checked> Usar el horario del salón</label><div id="staffHoursDays"></div><button type="submit" class="primary">Guardar horario del profesional</button><button type="button" class="ghost" id="staffHoursClose">Cerrar horario</button></form>';
+  form.after(hoursEditor);
+  const hoursForm=hoursEditor.querySelector('form'),hoursDays=hoursEditor.querySelector('#staffHoursDays');
+  let hoursProfessional=null,hoursVersion=0;
+  const dayNames=['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+  const dayControls=dayNames.map((name,index)=>{
+    const group=document.createElement('fieldset');group.style.cssText='border:1px solid #ddd;border-radius:10px;padding:10px;margin:8px 0';
+    const legend=document.createElement('legend');legend.textContent=name;
+    const openLabel=document.createElement('label'),open=document.createElement('input');open.type='checkbox';open.name='open'+index;
+    openLabel.append(open,document.createTextNode(' Trabaja este día'));
+    const beginLabel=document.createElement('label'),begin=document.createElement('input');begin.type='time';begin.name='start'+index;begin.value='09:00';beginLabel.append(document.createTextNode('Entrada'),begin);
+    const endLabel=document.createElement('label'),end=document.createElement('input');end.type='time';end.name='end'+index;end.value='18:00';endLabel.append(document.createTextNode('Salida'),end);
+    group.append(legend,openLabel,beginLabel,endLabel);hoursDays.append(group);
+    open.onchange=()=>syncHoursControls();
+    return {open,begin,end};
+  });
+  function syncHoursControls(){
+    const inherit=hoursForm.elements.namedItem('inherit').checked;
+    hoursDays.hidden=inherit;
+    dayControls.forEach(day=>{day.open.disabled=busy||inherit;day.begin.disabled=busy||inherit||!day.open.checked;day.end.disabled=busy||inherit||!day.open.checked;});
+  }
+  hoursForm.elements.namedItem('inherit').onchange=syncHoursControls;
+  function closeHours(){hoursVersion++;hoursProfessional=null;hoursEditor.hidden=true;}
+  hoursEditor.querySelector('#staffHoursClose').onclick=()=>{if(!busy)closeHours();};
+  async function editHours(row){
+    if(busy)return;
+    const current=++hoursVersion;hoursProfessional=null;hoursEditor.hidden=true;status.textContent='Cargando horario…';
+    try{
+      const data=await api('salon/hours');
+      if(current!==hoursVersion)return;
+      hoursProfessional=row.id;
+      hoursEditor.querySelector('#staffHoursTitle').textContent='Horario de '+row.name;
+      hoursEditor.querySelector('#staffHoursZone').textContent=data.hours?.timezone?'Zona horaria del salón: '+data.hours.timezone:'Configura primero el horario del salón en Ajustes.';
+      hoursForm.elements.namedItem('inherit').checked=row.weekly_hours==null;
+      const days=row.weekly_hours||data.hours?.days||[];
+      dayControls.forEach((control,index)=>{const day=days[index];control.open.checked=!!day?.open;control.begin.value=day?.start||'09:00';control.end.value=day?.end||'18:00';});
+      syncHoursControls();hoursEditor.hidden=false;status.textContent='';
+      hoursEditor.scrollIntoView({block:'start',behavior:'smooth'});
+    }catch(error){if(current===hoursVersion)status.textContent=error.message;}
+  }
+  hoursForm.onsubmit=async event=>{
+    event.preventDefault();if(busy||!hoursProfessional)return;
+    const inherit=hoursForm.elements.namedItem('inherit').checked;
+    const days=inherit?null:dayControls.map(day=>day.open.checked?{open:true,start:day.begin.value,end:day.end.value}:{open:false});
+    if(days?.some(day=>day.open&&(!day.start||!day.end||day.start>=day.end))){status.textContent='La entrada debe ser anterior a la salida en cada día de trabajo.';return;}
+    busy=true;hoursForm.querySelectorAll('input,button').forEach(control=>control.disabled=true);status.textContent='Guardando horario…';
+    try{
+      const saved=await api('professionals/'+encodeURIComponent(hoursProfessional)+'/hours','PATCH',{days});
+      closeHours();await load();
+      status.textContent=saved.outsideAppointments?'Horario guardado. '+saved.outsideAppointments+' cita(s) existente(s) quedan fuera del nuevo horario. Revísalas en Citas.':'Horario guardado. Las citas existentes se conservan.';
+    }catch(error){status.textContent=error.message;}
+    finally{busy=false;hoursForm.querySelectorAll('input,button').forEach(control=>control.disabled=false);syncHoursControls();}
+  };
+
+  function reset() {closeHours();editing=null;form.reset();document.getElementById('teamFormTitle').textContent='Nuevo profesional';}
   function updateFilter(rows) {
     const value=filter.value;
     filter.replaceChildren(new Option('Todos los profesionales',''),new Option('Sin asignar','unassigned'));
@@ -1662,14 +1718,16 @@ status.focus({ preventScroll: true });
         detail.append(name,contact);
         const edit=document.createElement('button');edit.type='button';edit.className='ghost';edit.textContent='Editar';
         edit.onclick=()=>{if(busy)return;editing=row.id;['name','phone','email'].forEach(key=>form.elements.namedItem(key).value=row[key]||'');document.getElementById('teamFormTitle').textContent='Editar profesional';form.elements.namedItem('name').focus();};
-        card.append(detail,edit);list.append(card);
+        const schedule=document.createElement('button');schedule.type='button';schedule.className='ghost';schedule.textContent='Horario';schedule.onclick=()=>editHours(row);
+        const scheduleLabel=document.createElement('div');scheduleLabel.className='small';scheduleLabel.textContent=row.weekly_hours?'Horario personalizado':'Usa el horario del salón';detail.append(scheduleLabel);
+        card.append(detail,edit,schedule);list.append(card);
       });
       status.textContent=rows.length?'':'Todavía no hay profesionales. Añade el primero.';
     } catch(error){if(current===version)status.textContent=error.message;}
   }
   trigger.onclick=()=>{if(busy)return;reset();openModal('teamModal');load();};
-  modal.querySelector('.close').onclick=()=>{if(!busy){version++;closeModal('teamModal');}};
-  modal.onclick=event=>{if(event.target===modal&&!busy){version++;closeModal('teamModal');}};
+  modal.querySelector('.close').onclick=()=>{if(!busy){closeHours();version++;closeModal('teamModal');}};
+  modal.onclick=event=>{if(event.target===modal&&!busy){closeHours();version++;closeModal('teamModal');}};
   document.getElementById('teamReset').onclick=()=>{if(!busy)reset();};
   form.onsubmit=async event=>{
     event.preventDefault();if(busy)return;
