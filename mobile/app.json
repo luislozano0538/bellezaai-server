@@ -13,7 +13,14 @@
       "package": "com.bellezaai.app"
     },
     "plugins": [
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "BellezaAI necesita acceso a tus fotos para publicar trabajos del salón.",
+          "cameraPermission": "BellezaAI necesita acceso a la cámara para añadir fotos del salón."
+        }
+      ]
     ]
   }
 }
