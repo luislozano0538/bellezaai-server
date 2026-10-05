@@ -43,6 +43,10 @@ jobs:
           node --check ../server.js
           node --check ../staff-access.js
 
+      - name: Backend tests
+        working-directory: .
+        run: npm test
+
       - name: Expo Doctor
         run: npx expo-doctor
 
