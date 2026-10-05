@@ -31,7 +31,13 @@ const DEFAULT_API_URL =
 const API_URL = String(process.env.EXPO_PUBLIC_API_URL || DEFAULT_API_URL).replace(/\/$/, "");
 
 async function api(path, { token, method = "GET", body } = {}) {
-  if (!API_URL) throw new Error("Falta configurar EXPO_PUBLIC_API_URL.");
+  if (!API_URL) {
+    throw new Error(
+      APP_ENV === "preview"
+        ? "Esta versión de prueba todavía no tiene un backend staging configurado."
+        : "Falta configurar EXPO_PUBLIC_API_URL."
+    );
+  }
   const response = await fetch(API_URL + path, {
     method,
     headers: {
@@ -103,7 +109,10 @@ function Login({ onLoggedIn }) {
       <SafeAreaView style={styles.flex}>
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.login}>
           <View style={styles.logo}><Text style={styles.logoText}>B</Text></View>
-          <Text style={styles.title}>BellezaAI</Text>
+          <View style={styles.brandRow}>
+            <Text style={styles.title}>BellezaAI</Text>
+            {APP_ENV === "preview" && <Text style={styles.previewBadge}>PRUEBA</Text>}
+          </View>
           <Text style={styles.subtitle}>Tu salón, clientes y agenda en un solo lugar.</Text>
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Iniciar sesión</Text>
@@ -188,7 +197,10 @@ function Home({ token, logout, navigate }) {
     <ScrollView contentContainerStyle={styles.screen}>
       <View style={styles.headerRow}>
         <View>
-          <Text style={styles.eyebrow}>BellezaAI</Text>
+          <View style={styles.brandInline}>
+            <Text style={styles.eyebrow}>BellezaAI</Text>
+            {APP_ENV === "preview" && <Text style={styles.previewBadgeSmall}>PRUEBA</Text>}
+          </View>
           <Text style={styles.screenTitle}>{data?.salon?.name || "Tu salón"}</Text>
           <Text style={styles.muted}>Hola, {data?.profile?.name || "propietario"}</Text>
         </View>
@@ -604,6 +616,10 @@ const styles = StyleSheet.create({
   },
   logoText: { color: "white", fontSize: 36, fontWeight: "800" },
   title: { fontSize: 34, fontWeight: "800", textAlign: "center", color: "#2d2030" },
+  brandRow: { alignItems: "center", justifyContent: "center", gap: 8 },
+  brandInline: { flexDirection: "row", alignItems: "center", gap: 8 },
+  previewBadge: { alignSelf: "center", color: "#8a3048", backgroundColor: "#f7e7ec", fontWeight: "900", fontSize: 12, letterSpacing: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5 },
+  previewBadgeSmall: { color: "#8a3048", backgroundColor: "#f7e7ec", fontWeight: "900", fontSize: 10, letterSpacing: 1, borderRadius: 999, paddingHorizontal: 7, paddingVertical: 3 },
   subtitle: { textAlign: "center", color: "#756779", marginTop: 8, marginBottom: 28, fontSize: 16 },
   screen: { padding: 18, paddingBottom: 40, gap: 14 },
   headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 12 },
