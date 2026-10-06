@@ -361,6 +361,7 @@ translate();renderHome();renderAppointments();renderCustomers();
       button.textContent = 'Cerrar sesión';
       dialog.close();
       form.reset();
+      window.dispatchEvent(new Event('account-signed-in'));
     } catch (error) {
       status.textContent = error.message ||
         'No se pudo conectar. Inténtalo otra vez.';
@@ -484,12 +485,13 @@ translate();renderHome();renderAppointments();renderCustomers();
         );
       }
 
+      try { sessionStorage.setItem('bellezaAIWelcomePath', '/reservar/' + data.salonId); } catch { /* The guide remains available manually. */ }
       form.reset();
       dialog.close();
 
       document.getElementById('loginEmail').value = fields.email;
       document.getElementById('loginStatus').textContent =
-        'Cuenta creada. Introduce tu contraseña para entrar.';
+        'Cuenta creada. Entra para configurar los servicios y horarios de tu salón.';
       document.getElementById('loginDialog').showModal();
       document.getElementById('loginPassword').focus();
     } catch (error) {
@@ -1972,7 +1974,7 @@ status.focus({ preventScroll: true });
  const button=document.createElement('button');button.type='button';button.className='ghost';button.textContent='Preparar mi salón';button.style.margin='12px';document.querySelector('#home').prepend(button);
  const settingsButton=button.cloneNode(true);document.querySelector('#settings .pagebar').after(settingsButton);
  const modal=document.createElement('div');modal.className='modal';modal.id='setupModal';
- modal.innerHTML='<div class="sheet"><div class="sheetbar"><h2>Preparar mi salón</h2><button type="button" class="close" aria-label="Cerrar">×</button></div><p>Tu progreso se calcula con los datos guardados. Completa lo pendiente y vuelve aquí para actualizarlo.</p><p id="setupStatus" role="status"></p><div id="setupItems"></div><button id="setupRefresh" type="button" class="ghost">Actualizar progreso</button><p><a id="setupPublic" target="_blank" rel="noopener" hidden>Abrir página de reservas</a></p></div>';
+ modal.innerHTML='<div class="sheet"><div class="sheetbar"><h2>Preparar mi salón</h2><button type="button" class="close" aria-label="Cerrar">×</button></div><p>Tu progreso se calcula con los datos guardados. Completa lo pendiente y vuelve aquí para actualizarlo.</p><p id="setupStatus" role="status"></p><button id="setupNext" type="button" class="primary" hidden>Continuar configuración</button><div id="setupItems"></div><button id="setupRefresh" type="button" class="ghost">Actualizar progreso</button><p><a id="setupPublic" target="_blank" rel="noopener" hidden>Abrir página de reservas</a></p></div>';
  document.querySelector('.app').append(modal);let version=0;
  const status=modal.querySelector('#setupStatus'),list=modal.querySelector('#setupItems'),refresh=modal.querySelector('#setupRefresh'),link=modal.querySelector('#setupPublic');
  function go(id){
@@ -1985,15 +1987,27 @@ status.focus({ preventScroll: true });
    target.scrollIntoView({behavior:'smooth',block:'center'});target.focus();if(id==='published')target.click();
   }
  }
- async function load(){
+ const next=modal.querySelector('#setupNext');
+ function welcomePath(){try{return sessionStorage.getItem('bellezaAIWelcomePath');}catch{return null;}}
+ async function load({welcome=false}={}){
+  const expectedPath=welcome?welcomePath():null;
+  if(welcome&&!expectedPath)return;
   const current=++version,token=localStorage.getItem('bellezaAIToken');
+  next.hidden=true;next.onclick=null;
   list.replaceChildren();link.hidden=true;refresh.disabled=true;status.textContent='Consultando configuración…';
   try{
    if(!token)throw Error('Inicia sesión para ver la configuración de tu salón.');
    const response=await fetch('/api/salon/setup',{headers:{Authorization:'Bearer '+token},cache:'no-store'}),data=await response.json();
    if(current!==version)return;if(token!==localStorage.getItem('bellezaAIToken'))throw Error('La sesión cambió. Vuelve a abrir la guía.');
    if(!response.ok)throw Error(data.error||'No se pudo cargar la configuración.');
+   if(welcome){
+    if(data.path!==expectedPath||!data.owner)return;
+    openModal('setupModal');
+    try{sessionStorage.removeItem('bellezaAIWelcomePath');}catch{}
+   }
    const required=data.items.filter(item=>item.required),done=required.filter(item=>item.complete).length;
+   const pending=required.find(item=>!item.complete);
+   if(data.owner&&pending){next.textContent='Continuar: '+pending.label;next.onclick=()=>go(pending.id);next.hidden=false;}
    status.textContent=done+' de '+required.length+' pasos necesarios completos. '+(data.ready?'Configuración básica lista para recibir reservas; los horarios disponibles dependen de tu agenda.':'Completa los pasos necesarios para habilitar las reservas.')+(data.owner?'':' El propietario puede modificar esta configuración.');
    data.items.forEach(item=>{
     const row=document.createElement('div');row.className='item';const info=document.createElement('div');info.className='grow';
@@ -2007,7 +2021,10 @@ status.focus({ preventScroll: true });
   finally{if(current===version)refresh.disabled=false;}
  }
  button.onclick=settingsButton.onclick=()=>{openModal('setupModal');load();};
- refresh.onclick=load;modal.querySelector('.close').onclick=()=>{version++;closeModal('setupModal');};
+ refresh.onclick=()=>load();
+ window.addEventListener('account-signed-in',()=>load({welcome:true}));
+ if(localStorage.getItem('bellezaAIToken')&&welcomePath())load({welcome:true});
+ modal.querySelector('.close').onclick=()=>{version++;closeModal('setupModal');};
  modal.onclick=event=>{if(event.target===modal){version++;closeModal('setupModal');}};
 })();
 </script>
