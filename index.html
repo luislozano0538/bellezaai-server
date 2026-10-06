@@ -376,21 +376,21 @@ translate();renderHome();renderAppointments();renderCustomers();
     <p>Registra tu salón para comenzar.</p>
 
     <label for="registerName">Tu nombre</label>
-    <input id="registerName" name="name" required
+    <input id="registerName" name="name" required maxlength="100"
       autocomplete="name">
 
     <label for="registerSalon">Nombre del salón</label>
-    <input id="registerSalon" name="salonName" required
+    <input id="registerSalon" name="salonName" required maxlength="150"
       autocomplete="organization">
 
     <label for="registerEmail">Correo electrónico</label>
-    <input id="registerEmail" name="email" type="email"
+    <input id="registerEmail" name="email" type="email" maxlength="254"
       required autocomplete="username">
 
     <label for="registerPassword">Contraseña</label>
     <input id="registerPassword" name="password" type="password"
-      required minlength="12" autocomplete="new-password">
-    <small>Usa al menos 12 caracteres.</small>
+      required minlength="12" maxlength="72" autocomplete="new-password">
+    <small>Usa al menos 12 caracteres. Máximo 72 bytes; los acentos y emojis ocupan más espacio.</small>
 
     <p id="registerStatus" role="status"></p>
     <button id="registerSubmit" type="submit">Crear cuenta</button>
@@ -457,6 +457,11 @@ translate();renderHome();renderAppointments();renderCustomers();
 
     if (!fields.name || !fields.salonName) {
       status.textContent = 'Escribe tu nombre y el nombre del salón.';
+      return;
+    }
+
+    if (fields.password.length < 12 || new TextEncoder().encode(fields.password).length > 72) {
+      status.textContent = 'Usa al menos 12 caracteres y un máximo de 72 bytes en la contraseña. Los acentos y emojis ocupan más espacio.';
       return;
     }
 
