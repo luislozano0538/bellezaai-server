@@ -232,121 +232,92 @@ app.get("/health", async (_req, res) => {
   }
 });
 
+function normalizedAccountEmail(value) {
+  return typeof value === "string" ? value.trim().toLowerCase() : "";
+}
+
 app.post("/api/auth/register", async (req, res) => {
   if (!requireConfig(res)) return;
 
-  const {
-    email,
-    password,
-    name,
-    salonName = "Color & Stillo"
-  } = req.body || {};
+  const body = req.body || {};
+  const email = normalizedAccountEmail(body.email);
+  const name = typeof body.name === "string" ? body.name.trim() : "";
+  const salonName = typeof body.salonName === "string" ? body.salonName.trim() : "";
+  const password = body.password;
 
-  if (!email || !password || !name) {
-    return res.status(400).json({
-      error: "Faltan datos."
-    });
+  if (!name || name.length > 100 || !salonName || salonName.length > 150) {
+    return res.status(400).json({error:"Escribe tu nombre (hasta 100 caracteres) y el nombre del salón (hasta 150)."});
+  }
+  if (!email || email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({error:"Escribe un correo electrónico válido."});
+  }
+  if (typeof password !== "string" || password.length < 12 || Buffer.byteLength(password, "utf8") > 72) {
+    return res.status(400).json({error:"Usa al menos 12 caracteres en la contraseña y un máximo de 72 bytes. Los acentos y emojis ocupan más de un byte."});
   }
 
-  const client = await pool.connect();
-
+  let client;
+  let inTransaction = false;
   try {
+    // Do the expensive hash before holding a database connection.
+    const hash = await bcrypt.hash(password, 12);
+    client = await pool.connect();
     await client.query("BEGIN");
-
+    inTransaction = true;
     const salonId = crypto.randomUUID();
     const userId = crypto.randomUUID();
-
-    const slug =
-      `${salonName
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-|-$/g, "")}-${salonId.slice(0, 6)}`;
+    const slugBase = salonName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "salon";
+    const slug = slugBase + "-" + salonId;
 
     await client.query(
       "INSERT INTO salons(id,name,slug) VALUES($1,$2,$3)",
       [salonId, salonName, slug]
     );
-
-    const hash = await bcrypt.hash(password, 12);
-
     await client.query(
-      `INSERT INTO users
-       (id,salon_id,email,password_hash,name)
-       VALUES($1,$2,$3,$4,$5)`,
-      [
-        userId,
-        salonId,
-        email.toLowerCase(),
-        hash,
-        name
-      ]
+      `INSERT INTO users (id,salon_id,email,password_hash,name,role)
+       VALUES($1,$2,$3,$4,$5,'owner')`,
+      [userId, salonId, email, hash, name]
     );
-
+    const token = jwt.sign({id:userId, salonId, role:"owner"}, JWT_SECRET, {expiresIn:"7d"});
     await client.query("COMMIT");
-
-    const token = jwt.sign(
-      {
-        id: userId,
-        salonId,
-        role: "owner"
-      },
-      JWT_SECRET,
-      { expiresIn: "7d" }
-    );
-
-    res.status(201).json({
-      token,
-      salonId
-    });
+    inTransaction = false;
+    return res.status(201).json({token, salonId});
   } catch (error) {
-    await client.query("ROLLBACK");
-
-    console.error(error);
-
-    res.status(409).json({
-      error: "No se pudo crear la cuenta."
-    });
+    if (client && inTransaction) {
+      try { await client.query("ROLLBACK"); } catch { /* Preserve the original error. */ }
+    }
+    if (error.code === "23505") {
+      return res.status(409).json({error:"No se pudo crear la cuenta con esos datos. Si ya tienes cuenta, intenta iniciar sesión."});
+    }
+    console.error("Account registration failed", error.code || error.name);
+    return res.status(503).json({error:"No pudimos confirmar la creación de tu cuenta. Intenta iniciar sesión antes de repetir el registro."});
   } finally {
-    client.release();
+    if (client) client.release();
   }
 });
 
-
 app.post("/api/auth/login", async (req, res) => {
   if (!requireConfig(res)) return;
-
-  const { email, password } = req.body || {};
-
-  const q = await pool.query(
-    "SELECT * FROM users WHERE email=$1",
-    [String(email || "").toLowerCase()]
-  );
-
-  const user = q.rows[0];
-
-  if (
-    !user ||
-    !(await bcrypt.compare(
-      password || "",
-      user.password_hash
-    ))
-  ) {
-    return res.status(401).json({
-      error: "Credenciales incorrectas."
-    });
+  const email = normalizedAccountEmail(req.body?.email);
+  const password = req.body?.password;
+  // Existing accounts keep their original password rules.
+  if (!email || email.length > 254 || typeof password !== "string" || !password) {
+    return res.status(401).json({error:"Credenciales incorrectas."});
   }
-
-  const token = jwt.sign(
-    {
-      id: user.id,
-      salonId: user.salon_id,
-      role: user.role
-    },
-    JWT_SECRET,
-    { expiresIn: "7d" }
-  );
-
-  res.json({ token });
+  try {
+    const q = await pool.query("SELECT * FROM users WHERE email=$1", [email]);
+    const user = q.rows[0];
+    if (!user || !(await bcrypt.compare(password, user.password_hash))) {
+      return res.status(401).json({error:"Credenciales incorrectas."});
+    }
+    const token = jwt.sign(
+      {id:user.id, salonId:user.salon_id, role:user.role},
+      JWT_SECRET, {expiresIn:"7d"}
+    );
+    return res.json({token});
+  } catch (error) {
+    console.error("Account login failed", error.code || error.name);
+    return res.status(503).json({error:"No se pudo iniciar sesión en este momento. Inténtalo de nuevo más tarde."});
+  }
 });
 
 
