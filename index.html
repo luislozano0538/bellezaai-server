@@ -1802,7 +1802,7 @@ status.focus({ preventScroll: true });
   const trigger=document.createElement('button');trigger.type='button';trigger.className='ghost';trigger.textContent='Cierres y días libres';
   document.querySelector('#settings .pagebar').after(trigger);
   const modal=document.createElement('div');modal.className='modal';modal.id='closuresModal';
-  modal.innerHTML='<div class="sheet"><div class="sheetbar"><h2>Cierres y días libres</h2><button type="button" class="close" aria-label="Cerrar">×</button></div><p>Bloquea días completos o unas horas por almuerzo, vacaciones o ausencias. Las citas ya creadas se conservan para que puedas revisarlas.</p><p id="closuresStatus" role="status"></p><p id="closuresZone" class="small"></p><form id="closuresForm" class="form"><label>Bloquear para<select name="professionalId"><option value="">Todo el salón</option></select></label><label>Tipo de bloqueo<select name="closureType"><option value="days">Días completos</option><option value="hours">Unas horas de un día</option></select></label><label>Desde<input name="startsOn" type="date" required></label><label>Hasta (incluido)<input name="endsOn" type="date" required></label><div id="closureTimes" hidden><label>Hora de inicio<input name="startTime" type="time"></label><label>Hora final<input name="endTime" type="time"></label><p class="small">Este bloqueo se aplica solo a la fecha elegida. Puedes guardar varios descansos por día.</p></div><label>Motivo interno (opcional)<input name="reason" maxlength="200" placeholder="Vacaciones, festivo…"></label><button type="submit" class="primary">Guardar bloqueo</button></form><h3>Bloqueos vigentes y próximos</h3><div id="closuresList"></div><button type="button" class="ghost" id="closuresRefresh">Actualizar lista</button></div>';
+  modal.innerHTML='<div class="sheet"><div class="sheetbar"><h2>Cierres y días libres</h2><button type="button" class="close" aria-label="Cerrar">×</button></div><p>Bloquea días completos o unas horas por almuerzo, vacaciones o ausencias. Las citas ya creadas se conservan para que puedas revisarlas.</p><p id="closuresStatus" role="status"></p><p id="closuresZone" class="small"></p><form id="closuresForm" class="form"><label>Bloquear para<select name="professionalId"><option value="">Todo el salón</option></select></label><label>Tipo de bloqueo<select name="closureType"><option value="days">Días completos</option><option value="hours">Unas horas de un día</option></select></label><label>Repetición<select name="repeatWeeks"><option value="1">Solo esta vez</option><option value="2">Cada semana · 2 fechas</option><option value="4">Cada semana · 4 fechas</option><option value="8">Cada semana · 8 fechas</option><option value="12">Cada semana · 12 fechas</option></select></label><p class="small">La repetición conserva el día de la semana y la hora local; incluye la primera fecha.</p><label>Desde<input name="startsOn" type="date" required></label><label>Hasta (incluido)<input name="endsOn" type="date" required></label><div id="closureTimes" hidden><label>Hora de inicio<input name="startTime" type="time"></label><label>Hora final<input name="endTime" type="time"></label><p class="small">Puedes repetir este descanso cada semana o guardar varios descansos por día.</p></div><label>Motivo interno (opcional)<input name="reason" maxlength="200" placeholder="Vacaciones, festivo…"></label><button type="submit" class="primary">Guardar bloqueo</button></form><h3>Bloqueos vigentes y próximos</h3><div id="closuresList"></div><button type="button" class="ghost" id="closuresRefresh">Actualizar lista</button></div>';
   document.querySelector('.app').append(modal);
   const form=modal.querySelector('form'),status=modal.querySelector('#closuresStatus'),list=modal.querySelector('#closuresList');
   let busy=false,version=0,pending=null;
@@ -1818,11 +1818,13 @@ status.focus({ preventScroll: true });
     const partial=form.elements.namedItem('closureType').value==='hours';
     modal.querySelector('#closureTimes').hidden=!partial;
     ['startTime','endTime'].forEach(name=>form.elements.namedItem(name).required=partial);
-    const end=form.elements.namedItem('endsOn');end.readOnly=partial;
-    end.parentElement.hidden=partial;
-    if(partial)end.value=form.elements.namedItem('startsOn').value;
+    const singleDay=partial||Number(form.elements.namedItem('repeatWeeks').value)>1;
+    const end=form.elements.namedItem('endsOn');end.readOnly=singleDay;
+    end.parentElement.hidden=singleDay;
+    if(singleDay)end.value=form.elements.namedItem('startsOn').value;
   }
   form.elements.namedItem('closureType').onchange=syncClosureType;
+  form.elements.namedItem('repeatWeeks').onchange=syncClosureType;
   const labelTime=minutes=>String(Math.floor(minutes/60)).padStart(2,'0')+':'+String(minutes%60).padStart(2,'0');
   const labelDate=value=>new Intl.DateTimeFormat('es',{timeZone:'UTC',dateStyle:'medium'}).format(new Date(value+'T12:00:00Z'));
   async function load(){
@@ -1842,14 +1844,18 @@ status.focus({ preventScroll: true });
         const info=document.createElement('div');info.className='grow';
         const name=document.createElement('b');name.textContent=row.professional_id?(row.professional_name||'Profesional'):'Todo el salón';
         const dates=document.createElement('p');dates.textContent=labelDate(row.starts_on)+(row.ends_on!==row.starts_on?' – '+labelDate(row.ends_on):'')+(row.starts_minute!==null?' · '+labelTime(row.starts_minute)+' – '+labelTime(row.ends_minute):' · Día completo');
-        const reason=document.createElement('p');reason.className='small';reason.textContent=row.reason||'Sin motivo indicado';info.append(name,dates,reason);
-        const remove=document.createElement('button');remove.type='button';remove.className='ghost';remove.textContent='Quitar bloqueo';
-        remove.onclick=async()=>{
-          if(busy)return;lock(true);status.textContent='Quitando bloqueo…';
-          try{await api('salon/closures/'+encodeURIComponent(row.id),'PATCH',{active:false});await load();status.textContent='Bloqueo quitado. Las fechas vuelven a depender del horario y las citas existentes.';}
+        const reason=document.createElement('p');reason.className='small';reason.textContent=(row.reason||'Sin motivo indicado')+(row.series_id?' · Serie semanal ('+row.repeat_weeks+' fechas originales)':'');info.append(name,dates,reason);
+        async function removeBlock(scope){
+          if(busy)return;
+          if(scope==='series'&&!window.confirm('¿Quitar todos los bloqueos de esta serie semanal? Las citas existentes se conservan.'))return;
+          lock(true);status.textContent='Quitando bloqueo…';
+          try{await api('salon/closures/'+encodeURIComponent(row.id),'PATCH',{active:false,scope});await load();status.textContent=scope==='series'?'Serie quitada.':'Bloqueo quitado para esta fecha.';}
           catch(error){status.textContent=error.message;}finally{lock(false);}
-        };
-        card.append(info,remove);list.append(card);
+        }
+        const remove=document.createElement('button');remove.type='button';remove.className='ghost';remove.textContent=row.series_id?'Quitar esta fecha':'Quitar bloqueo';remove.onclick=()=>removeBlock('single');
+        card.append(info,remove);
+        if(row.series_id){const series=document.createElement('button');series.type='button';series.className='ghost';series.textContent='Quitar toda la serie';series.onclick=()=>removeBlock('series');card.append(series);}
+        list.append(card);
       });
       if(!data.closures.length)list.textContent='No hay cierres vigentes ni próximos.';
       status.textContent='';
@@ -1864,6 +1870,8 @@ status.focus({ preventScroll: true });
   form.onsubmit=async event=>{
     event.preventDefault();if(busy)return;
     const values=Object.fromEntries(new FormData(form));values.professionalId=values.professionalId||null;values.reason=values.reason.trim();
+    values.repeatWeeks=Number(values.repeatWeeks);
+    if(values.repeatWeeks>1)values.endsOn=values.startsOn;
     if(values.endsOn<values.startsOn){status.textContent='La fecha final debe ser igual o posterior al inicio.';return;}
     const partial=values.closureType==='hours';
     const minutes=value=>{if(!/^\d{2}:\d{2}$/.test(value))return NaN;const [h,m]=value.split(':').map(Number);return h*60+m;};
@@ -1877,7 +1885,7 @@ status.focus({ preventScroll: true });
     try{
       const saved=await api('salon/closures','POST',{...values,requestId:pending.id});
       pending=null;form.reset();syncClosureType();await load();
-      status.textContent=saved.affectedAppointments?'Bloqueo guardado. Hay '+saved.affectedAppointments+' cita(s) existente(s) que coinciden con el bloqueo: revísalas en Citas.':'Bloqueo guardado. Ese período ya no acepta nuevas reservas para la selección indicada.';
+      status.textContent=(saved.repeatWeeks>1?'Serie de '+saved.repeatWeeks+' fechas guardada. ':'')+(saved.affectedAppointments?'Bloqueo guardado. Hay '+saved.affectedAppointments+' cita(s) existente(s) que coinciden con el bloqueo: revísalas en Citas.':'Bloqueo guardado. Ese período ya no acepta nuevas reservas para la selección indicada.');
     }catch(error){status.textContent=error.message;}finally{lock(false);}
   };
   trigger.onclick=()=>{if(busy)return;form.reset();syncClosureType();pending=null;openModal('closuresModal');load();};
