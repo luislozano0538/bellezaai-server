@@ -127,6 +127,8 @@ async function initDatabase() {
     );
     ALTER TABLE salon_closures ADD COLUMN IF NOT EXISTS starts_minute INTEGER;
     ALTER TABLE salon_closures ADD COLUMN IF NOT EXISTS ends_minute INTEGER;
+    ALTER TABLE salon_closures ADD COLUMN IF NOT EXISTS repeat_weeks INTEGER NOT NULL DEFAULT 1;
+    ALTER TABLE salon_closures ADD COLUMN IF NOT EXISTS series_id UUID;
     CREATE INDEX IF NOT EXISTS idx_closures_salon_dates ON salon_closures(salon_id,starts_on,ends_on) WHERE active=true;
 
     CREATE TABLE IF NOT EXISTS public_booking_requests (
