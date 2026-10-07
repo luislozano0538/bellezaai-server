@@ -17,6 +17,17 @@
   const id=location.pathname.split('/').filter(Boolean).pop();
   const base='/api/public/salons/'+encodeURIComponent(id);
   let catalog, selected='', version=0, busy=false;
+  let bookingAttempt=null,attemptStored=false;
+  function bookingRequestId(hash){
+    const key='bellezaBooking:'+id;
+    let saved=bookingAttempt;
+    if(!saved||saved.hash!==hash){try{saved=JSON.parse(sessionStorage.getItem(key)||'null');}catch{}}
+    const valid=saved?.hash===hash&&typeof saved.requestId==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(saved.requestId);
+    bookingAttempt={hash,requestId:valid?saved.requestId:crypto.randomUUID()};
+    attemptStored=false;
+    try{sessionStorage.setItem(key,JSON.stringify(bookingAttempt));attemptStored=true;}catch{}
+    return bookingAttempt.requestId;
+  }
   const dateKey=(date,tz)=>new Intl.DateTimeFormat('en-CA',{timeZone:tz,year:'numeric',month:'2-digit',day:'2-digit'}).format(date);
   const format=iso=>new Intl.DateTimeFormat('es',{timeZone:catalog.timezone,dateStyle:'full',timeStyle:'short'}).format(new Date(iso));
   const service=()=>catalog.services.find(s=>s.id===$('service').value);
@@ -111,10 +122,7 @@
     try {
       const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(payload)));
       const hash=Array.from(new Uint8Array(bytes),byte=>byte.toString(16).padStart(2,'0')).join('');
-      const key='bellezaBooking:'+id;
-      let saved;try{saved=JSON.parse(sessionStorage.getItem(key)||'null');}catch{}
-      payload.requestId=saved?.hash===hash?saved.requestId:crypto.randomUUID();
-      sessionStorage.setItem(key,JSON.stringify({hash,requestId:payload.requestId}));
+      payload.requestId=bookingRequestId(hash);
       const result=await api('/bookings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
       $('bookingForm').hidden=true;$('confirmation').hidden=false;
       const states={confirmed:'Tu cita está confirmada',cancelled:'Esta cita está cancelada',completed:'Esta cita está completada',no_show:'Esta cita figura como no asistida'};
@@ -127,7 +135,7 @@
         endsAt:result.endsAt,service:result.serviceName,salon:result.salonName,timezone:result.timezone};
       $('saveCalendar').hidden=result.status!=='confirmed';$('calendarHelp').hidden=result.status!=='confirmed';
       window.scrollTo({top:0,behavior:'smooth'});
-    }catch(error){$('notice').textContent=error.message;}
+    }catch(error){$('notice').textContent=error.message+(!attemptStored?' No recargues ni cierres esta página. Reintenta con los mismos datos para consultar el resultado sin duplicar la solicitud.':'');}
     finally{busy=false;controls.forEach(el=>el.disabled=false);$('submitBooking').disabled=!selected;}
   };
   (async()=>{
