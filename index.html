@@ -107,6 +107,19 @@
         <button class="ghost" type="button" onclick="document.getElementById('appointmentDateFilter').value='';renderAppointments()" data-t="clearDate">Quitar fecha</button>
       </div>
       <div class="chips"><button class="chip on" data-filter="all" onclick="setFilter(this,'all')" data-t="all">Todas</button><button class="chip" data-filter="today" onclick="setFilter(this,'today')" data-t="today">Hoy</button><button class="chip" data-filter="confirmed" onclick="setFilter(this,'confirmed')" data-t="confirmed">Confirmadas</button><button class="chip" data-filter="cancelled" onclick="setFilter(this,'cancelled')">Canceladas</button><button class="chip" data-filter="completed" onclick="setFilter(this,'completed')">Atendidas</button><button class="chip" data-filter="no_show" onclick="setFilter(this,'no_show')">No asistió</button></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin:12px 0" aria-label="Vista de agenda">
+        <button id="agendaListMode" type="button" class="ghost" aria-pressed="true" onclick="setAgendaMode('list')">Lista</button>
+        <button id="agendaWeekMode" type="button" class="ghost" aria-pressed="false" onclick="setAgendaMode('week')">Semana</button>
+      </div>
+      <div id="agendaWeekNav" hidden>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="ghost" type="button" onclick="moveAgendaWeek(-1)" aria-label="Semana anterior">←</button>
+          <button id="agendaThisWeek" class="ghost" type="button" onclick="moveAgendaWeek(0)">Esta semana</button>
+          <button class="ghost" type="button" onclick="moveAgendaWeek(1)" aria-label="Semana siguiente">→</button>
+        </div>
+        <p id="agendaWeekRange" role="status"></p>
+        <p id="agendaWeekZone" class="small"></p>
+      </div>
       <div id="appointmentList"></div>
     </section>
 
@@ -210,9 +223,61 @@ function renderHome(){const todays=appointments.filter(a=>a.status!=='cancelled'
 function sortAppt(a,b){return (a.date+a.time).localeCompare(b.date+b.time)}
 function appointmentHTML(a,showDate=true){return `<div class="item"><div class="timebox">${showDate?esc(prettyDate(a.date))+'<br>':''}${esc(prettyTime(a.time))}</div><div class="grow"><div class="item-title">${esc(a.name)}</div><div class="item-sub">${esc(a.service)} · <span class="badge">${tr[lang].confirmed}</span></div></div><div class="price">$${Number(a.price||0)}</div></div>`}
 function emptyHTML(t){return `<div class="empty"><b>${esc(t)}</b>Usa el botón + para comenzar.</div>`}
-function renderAppointments(){const q=(document.getElementById('appointmentSearch').value||'').toLowerCase();const selectedDate=document.getElementById('appointmentDateFilter').value;let rows=appointments.filter(a=>(!selectedDate||a.date===selectedDate)&&(!document.getElementById('agendaProfessional')?.value||(document.getElementById('agendaProfessional').value==='unassigned'?!a.professional_id:a.professional_id===document.getElementById('agendaProfessional').value))&&(filter!=='today'||a.date===localDate(0))&&(filter!=='confirmed'||a.status==='confirmed')&&(filter!=='cancelled'||a.status==='cancelled')&&(filter!=='completed'||a.status==='completed')&&(filter!=='no_show'||a.status==='no_show')&&(a.name+' '+a.service).toLowerCase().includes(q)).sort(sortAppt);document.getElementById('appointmentList').innerHTML=rows.map(a=>appointmentHTML(a,true)).join('')||emptyHTML(tr[lang].noAppointments)}
+let agendaMode='list';
+function agendaWeekDates(anchor){
+ const date=new Date(anchor+'T12:00:00Z');
+ if(!Number.isFinite(date.getTime()))return [];
+ date.setUTCDate(date.getUTCDate()-((date.getUTCDay()+6)%7));
+ return Array.from({length:7},(_,i)=>{const d=new Date(date);d.setUTCDate(d.getUTCDate()+i);return d.toISOString().slice(0,10);});
+}
+function setAgendaMode(mode){
+ agendaMode=mode==='week'?'week':'list';
+ if(agendaMode==='week'&&filter==='today'){filter='all';document.querySelectorAll('.chip').forEach(c=>c.classList.toggle('on',c.dataset.filter==='all'));}
+ renderAppointments();
+}
+function moveAgendaWeek(direction){
+ const field=document.getElementById('appointmentDateFilter');
+ if(direction===0)field.value=localDate(0);
+ else{const dates=agendaWeekDates(field.value||localDate(0));const d=new Date(dates[0]+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+direction*7);field.value=d.toISOString().slice(0,10);}
+ renderAppointments();
+}
+function renderAppointments(){
+ const es=lang==='es',weekly=agendaMode==='week';
+ const q=(document.getElementById('appointmentSearch').value||'').toLowerCase();
+ const selectedDate=document.getElementById('appointmentDateFilter').value;
+ const professional=document.getElementById('agendaProfessional')?.value;
+ const days=agendaWeekDates(selectedDate||localDate(0));
+ const rows=appointments.filter(a=>
+  (weekly?days.includes(a.date):(!selectedDate||a.date===selectedDate))&&
+  (!professional||(professional==='unassigned'?!a.professional_id:a.professional_id===professional))&&
+  (filter!=='today'||a.date===localDate(0))&&
+  (!['confirmed','cancelled','completed','no_show'].includes(filter)||a.status===filter)&&
+  (a.name+' '+a.service).toLowerCase().includes(q)).sort(sortAppt);
+ document.getElementById('agendaListMode').textContent=es?'Lista':'List';
+ document.getElementById('agendaWeekMode').textContent=es?'Semana':'Week';
+ document.getElementById('agendaListMode').setAttribute('aria-pressed',String(!weekly));
+ document.getElementById('agendaWeekMode').setAttribute('aria-pressed',String(weekly));
+ document.getElementById('agendaWeekNav').hidden=!weekly;
+ const list=document.getElementById('appointmentList');
+ if(!weekly){list.innerHTML=rows.map(a=>appointmentHTML(a,true)).join('')||emptyHTML(tr[lang].noAppointments);return;}
+ document.getElementById('agendaThisWeek').textContent=es?'Esta semana':'This week';
+ document.getElementById('agendaWeekRange').textContent=prettyDate(days[0])+' — '+prettyDate(days[6])+' · '+rows.length+(es?' citas con los filtros actuales':' appointments with current filters');
+ document.getElementById('agendaWeekZone').textContent=(es?'Fechas y horas de este dispositivo: ':'Dates and times on this device: ')+Intl.DateTimeFormat().resolvedOptions().timeZone;
+ list.replaceChildren();
+ days.forEach(day=>{
+  const section=document.createElement('section');section.style.cssText='border-top:1px solid #eee6ed;padding:14px 0';
+  const heading=document.createElement('h2');heading.style.fontSize='18px';
+  const items=rows.filter(a=>a.date===day);
+  heading.textContent=prettyDate(day)+(day===localDate(0)?(es?' · Hoy':' · Today'):'')+' ('+items.length+')';
+  section.append(heading);
+  const content=document.createElement('div');
+  if(items.length)content.innerHTML=items.map(a=>appointmentHTML(a,false)).join('');
+  else{content.className='small';content.textContent=es?'Sin citas con estos filtros.':'No appointments with these filters.';}
+  section.append(content);list.append(section);
+ });
+}
 function setAgendaDate(){if(filter==='today'){filter='all';document.querySelectorAll('.chip').forEach(c=>c.classList.toggle('on',c.dataset.filter==='all'));}renderAppointments()}
-function setFilter(el,f){if(f==='today'||f==='all')document.getElementById('appointmentDateFilter').value='';filter=f;document.querySelectorAll('.chip').forEach(c=>c.classList.toggle('on',c===el));renderAppointments()}
+function setFilter(el,f){if(f==='today'){agendaMode='list';document.getElementById('appointmentDateFilter').value='';}else if(f==='all'&&agendaMode==='list')document.getElementById('appointmentDateFilter').value='';filter=f;document.querySelectorAll('.chip').forEach(c=>c.classList.toggle('on',c===el));renderAppointments()}
 function initials(n){return n.split(/\s+/).slice(0,2).map(x=>x[0]).join('').toUpperCase()}
 function renderCustomers(){const normalizeClientSearch=value=>String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();const q=normalizeClientSearch(document.getElementById('customerSearch').value).trim();const rows=customers.filter(c=>normalizeClientSearch([c.name,c.phone,c.email,c.notes].filter(Boolean).join(' ')).includes(q));document.getElementById('customerList').innerHTML=rows.map(c=>`<div class="item"><div class="customer-avatar">${esc(initials(c.name))}</div><div class="grow"><div class="item-title">${esc(c.name)}</div><div class="customer-meta">${[c.phone,c.email].filter(Boolean).map(value=>esc(value)).join(' · ')}${c.phone||c.email?' · ':''}${Number(c.appointment_count)||0} ${lang==='es'?'citas no canceladas':'non-cancelled appointments'}</div>${c.notes ? `<details style="margin-top:8px"><summary style="cursor:pointer">${lang==='es'?'Notas del cliente':'Client notes'}</summary><div style="white-space:pre-wrap;overflow-wrap:anywhere;margin-top:6px">${esc(c.notes)}</div></details>` : ''}<button class="link" data-book-client="${esc(c.id)}">${lang==='es'?'Nueva cita':'New appointment'}</button></div><button class="ghost" data-history-client="${esc(c.id)}">Historial</button><button class="ghost" data-edit-client="${esc(c.id)}">Editar</button></div>`).join('')||emptyHTML(q?(lang==='es'?'No hay clientes que coincidan con tu búsqueda.':'No clients match your search.'):tr[lang].noCustomers)}
 function openAppointment(){const f=document.getElementById('appointmentForm');f.reset();f.date.value=localDate(0);f.time.value='09:00';openModal('appointmentModal')}
