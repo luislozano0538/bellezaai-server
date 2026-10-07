@@ -9,7 +9,7 @@ export function registerPublicBooking({app,pool,auth,validBusinessHours,withinBu
   function limit(req,res,next) {
     const key=req.params.id, now=Date.now();
     if(!uuid(key))return res.status(404).json({error:'Página no disponible.'});
-    if(reads.size>2000) for(const [id,item] of reads) if(item.until<now) reads.delete(id);
+    if(reads.size>=2000) for(const [id,item] of reads) if(item.until<=now) reads.delete(id);
     const item=reads.get(key);
     if(!item && reads.size>=2000)return res.status(429).json({error:'Inténtalo más tarde.'});
     if(item && item.until>now && item.count>=180) return res.status(429).json({error:"Espera un minuto antes de consultar otra vez."});
