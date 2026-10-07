@@ -5,6 +5,7 @@ import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import pg from "pg";
+import { createAuthGate } from "./auth-limits.js";
 import OpenAI from "openai";
 import { registerClosures, appointmentIsClosed } from "./closures.js";
 import { registerSalonProfile } from "./salon-profile.js";
@@ -12,6 +13,7 @@ import { registerPublicBooking } from "./public-booking.js";
 
 const { Pool } = pg;
 const app = express();
+const authGate = createAuthGate();
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const PORT = Number(process.env.PORT || 3001);
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -255,6 +257,8 @@ app.post("/api/auth/register", async (req, res) => {
     return res.status(400).json({error:"Usa al menos 12 caracteres en la contraseña y un máximo de 72 bytes. Los acentos y emojis ocupan más de un byte."});
   }
 
+  const releaseAttempt = authGate.enter("register", email, res);
+  if (!releaseAttempt) return;
   let client;
   let inTransaction = false;
   try {
@@ -291,7 +295,7 @@ app.post("/api/auth/register", async (req, res) => {
     console.error("Account registration failed", error.code || error.name);
     return res.status(503).json({error:"No pudimos confirmar la creación de tu cuenta. Intenta iniciar sesión antes de repetir el registro."});
   } finally {
-    if (client) client.release();
+    try { if (client) client.release(); } finally { releaseAttempt(); }
   }
 });
 
@@ -303,6 +307,8 @@ app.post("/api/auth/login", async (req, res) => {
   if (!email || email.length > 254 || typeof password !== "string" || !password) {
     return res.status(401).json({error:"Credenciales incorrectas."});
   }
+  const releaseAttempt = authGate.enter("login", email, res);
+  if (!releaseAttempt) return;
   try {
     const q = await pool.query("SELECT * FROM users WHERE email=$1", [email]);
     const user = q.rows[0];
@@ -317,6 +323,8 @@ app.post("/api/auth/login", async (req, res) => {
   } catch (error) {
     console.error("Account login failed", error.code || error.name);
     return res.status(503).json({error:"No se pudo iniciar sesión en este momento. Inténtalo de nuevo más tarde."});
+  } finally {
+    releaseAttempt();
   }
 });
 
