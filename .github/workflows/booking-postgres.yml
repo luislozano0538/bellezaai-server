@@ -38,3 +38,22 @@ jobs:
           name: booking-integration-result
           path: integration-result.json
           if-no-files-found: ignore
+
+  client-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --ignore-scripts --no-save playwright@1.56.1
+      - run: npx playwright install --with-deps chromium
+      - run: node booking-wizard.browser.mjs
+        timeout-minutes: 2
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: booking-mobile-preview
+          path: booking-preview
+          if-no-files-found: ignore
