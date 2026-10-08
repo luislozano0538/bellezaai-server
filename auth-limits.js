@@ -22,7 +22,7 @@ export function createAuthGate({now=Date.now,maxEntries=5000,maxActive=4}={}) {
       const key=operation+':'+createHash('sha256').update(email.trim().toLowerCase()).digest('hex');
       let bucket=buckets.get(key);
       if(bucket?.until<=time){buckets.delete(key);bucket=null;}
-      const limit=operation==='register'?5:20;
+      const limit=['register','recovery'].includes(operation)?5:20;
       if(bucket&&bucket.count>=limit)return deny(res,(bucket.until-time)/1000,'Se alcanzó el límite de intentos para este correo.');
       if(active>=maxActive)return deny(res,5,'Hay demasiados accesos en curso.');
       if(time-globalStart>=60000){globalStart=time;globalCount=0;}
