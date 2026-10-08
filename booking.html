@@ -4,19 +4,22 @@
 :root{font-family:system-ui,sans-serif;color:#2b2030;background:#f8f4f8;color-scheme:light}*{box-sizing:border-box}body{margin:0}header{background:linear-gradient(120deg,#593162,#ae648f);color:white;padding:40px 24px}header>div,main{max-width:760px;margin:auto}header small{letter-spacing:2px}h1{font-size:32px;margin:10px 0}main{padding:24px 18px 60px}.card{background:white;border:1px solid #eadfea;border-radius:22px;padding:24px;margin-bottom:18px}h2{font-size:20px;margin-top:0}label{display:block;font-weight:600;margin:16px 0 8px}input,select{width:100%;font:inherit;padding:13px;border:1px solid #c8bacb;border-radius:10px;background:white;color:inherit}button{font:inherit;cursor:pointer;border:1px solid #c8bacb;border-radius:12px;padding:12px 16px;background:white;color:#593162}button:disabled{opacity:.5;cursor:default}.primary{background:#703e7b;color:white;border:0;font-weight:700;width:100%;margin-top:20px}.slots{display:flex;flex-wrap:wrap;gap:10px;margin:16px 0}.slots button[aria-pressed=true]{background:#703e7b;color:white}.muted{color:#67586c;line-height:1.5}#notice{padding:12px 0;white-space:pre-wrap}#confirmation{border:2px solid #4d896d}.offscreen{position:absolute;left:-10000px}a{color:#703e7b}.steps{font-size:14px;opacity:.9}#summary{background:#f8f4f8;border-radius:12px;padding:16px;white-space:pre-line}
 #weeklyHours{margin:0}#weeklyHours>div{display:flex;justify-content:space-between;gap:16px;padding:8px 0;border-bottom:1px solid #eadfea}#weeklyHours dd{margin:0;text-align:right}
 .service-cards{display:grid;gap:12px}.service-option{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;border:1px solid #ded0e1;border-radius:16px;padding:18px}.service-option h3{margin:0 0 8px;font-size:18px;overflow-wrap:anywhere}.service-option p{margin:4px 0;overflow-wrap:anywhere}.service-option .service-price{font-weight:700}.service-option.chosen{border:2px solid #703e7b;background:#faf4fb;padding:17px}.service-option button{min-height:44px}.service-option button[aria-pressed=true]{background:#703e7b;color:white}@media(max-width:420px){.service-option{grid-template-columns:1fr}.service-option button{width:100%}}
+[hidden]{display:none!important}.booking-progress{display:flex;gap:8px;margin:0 0 18px}.booking-progress button{flex:1;padding:12px 6px;font-size:14px}.booking-progress [aria-current=step]{background:#593162;color:white;border-color:#593162}.step-actions{display:flex;gap:12px;align-items:center;margin-top:20px}.step-actions .primary{margin:0}.date-strip{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;margin:14px 0}.date-strip button{padding:10px 2px;font-size:12px}.date-strip strong{display:block;font-size:19px;margin:4px 0}.date-strip [aria-pressed=true]{background:#703e7b;color:white}.selection-preview{border-left:4px solid #ae648f;padding:12px 16px;margin-bottom:18px;white-space:pre-line;background:#fff}.card h2:focus{outline:none}.service-filter{margin-bottom:16px}details summary{cursor:pointer;font-weight:700}#salonHours{padding:18px 24px}#serviceCount{font-size:14px}@media(max-width:420px){main{padding:16px 12px 40px}.card{padding:18px}.booking-progress button{font-size:12px}}
 </style></head><body>
-<header><div><small>BELLEZAAI</small><h1 id="salonName">Reserva tu próxima cita</h1><p class="steps">Servicio → Profesional → Horario → Confirmación</p></div></header>
-<main><section class="card" id="salonProfile" hidden><h2>Conoce el salón</h2><div id="salonPhotos" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px"></div><p id="salonDescription" style="white-space:pre-line;overflow-wrap:anywhere"></p><p id="salonAddress" style="white-space:pre-line;overflow-wrap:anywhere"></p><a id="salonPhone" hidden></a></section><p id="notice" role="status">Cargando el salón…</p><section class="card" id="salonHours" hidden><h2>Horario del salón</h2><dl id="weeklyHours"></dl><p class="muted">Las horas disponibles dependen de la duración del servicio y de las citas ya reservadas.</p></section><form id="bookingForm" hidden>
-<section class="card"><h2>1. Elige tu servicio</h2><p class="muted">Compara los servicios y elige el que quieres reservar.</p><input id="service" type="hidden"><div id="serviceCards" class="service-cards" role="group" aria-label="Servicios disponibles"></div><p id="serviceInfo" class="muted" role="status"></p><label for="professional">Profesional</label><select id="professional"></select></section>
-<section class="card"><h2>2. Encuentra tu horario</h2><p id="timezone" class="muted"></p><label for="date">Día de tu cita</label><input id="date" type="date" required><p class="muted">Reservas con al menos 30 minutos de anticipación, hasta 90 días.</p><button type="button" id="findSlots">Ver horarios disponibles</button> <button type="button" id="findNext">Buscar la próxima cita disponible</button> <button type="button" id="stopSearch" hidden>Detener búsqueda</button><p class="muted">La búsqueda recorre hasta 14 días desde la fecha elegida, con el servicio y profesional seleccionados.</p><p id="slotNotice" role="status"></p><div id="slots" class="slots"></div></section>
-<section class="card"><h2>3. Tus datos</h2><label for="name">Nombre</label><input id="name" autocomplete="name" maxlength="120" required><label for="phone">Teléfono de contacto</label><input id="phone" type="tel" autocomplete="tel" maxlength="30" required><label for="email">Correo (opcional)</label><input id="email" type="email" autocomplete="email" maxlength="254"><label class="offscreen" aria-hidden="true">Página web<input id="website" tabindex="-1" autocomplete="off"></label><p class="muted">Tus datos se entregan a este salón para gestionar la cita.</p><div id="summary">Elige un horario para revisar tu reserva.</div><button class="primary" id="submitBooking" disabled>Confirmar reserva</button><p class="muted">No se realiza ningún cobro en esta página.</p></section></form>
+<header><div><small>BELLEZAAI</small><h1 id="salonName">Reserva tu próxima cita</h1><p class="steps">Tu próxima visita, en tres pasos</p></div></header>
+<main><section class="card" id="salonProfile" hidden><h2>Conoce el salón</h2><div id="salonPhotos" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px"></div><p id="salonDescription" style="white-space:pre-line;overflow-wrap:anywhere"></p><p id="salonAddress" style="white-space:pre-line;overflow-wrap:anywhere"></p><a id="salonPhone" hidden></a></section><p id="notice" role="status">Cargando el salón…</p><section class="card" id="salonHours" hidden><details><summary>Horario del salón</summary><dl id="weeklyHours"></dl><p class="muted">Las horas disponibles dependen de la duración del servicio y de las citas ya reservadas.</p></details></section><form id="bookingForm" hidden>
+<nav class="booking-progress" aria-label="Pasos de tu reserva"><button type="button" id="stepNav1" aria-current="step">1 · Servicio</button><button type="button" id="stepNav2" disabled>2 · Horario</button><button type="button" id="stepNav3" disabled>3 · Confirmar</button></nav>
+<div id="selectionPreview" class="selection-preview" hidden></div>
+<section class="card" id="step1"><h2 tabindex="-1">Elige tu servicio</h2><p class="muted">Compara los servicios y elige el que quieres reservar.</p><label for="serviceSearch">Buscar un servicio</label><input id="serviceSearch" class="service-filter" type="search" placeholder="Ej. corte, balayage" autocomplete="off"><p id="serviceCount" role="status"></p><input id="service" type="hidden"><div id="serviceCards" class="service-cards" role="group" aria-label="Servicios disponibles"></div><p id="serviceInfo" class="muted" role="status"></p><div class="step-actions"><button type="button" class="primary" id="toSchedule" disabled>Elegir día y hora</button></div></section>
+<section class="card" id="step2" hidden><h2 tabindex="-1">Elige quién te atiende y cuándo</h2><label for="professional">Profesional</label><select id="professional"></select><p id="timezone" class="muted"></p><label for="date">Día de tu cita</label><input id="date" type="date" required><div id="quickDates" class="date-strip" role="group" aria-label="Elegir día"></div><p class="muted">Reservas con al menos 30 minutos de anticipación, hasta 90 días.</p><button type="button" id="findSlots">Ver horarios disponibles</button> <button type="button" id="findNext">Buscar la próxima cita disponible</button> <button type="button" id="stopSearch" hidden>Detener búsqueda</button><p class="muted">La búsqueda recorre hasta 14 días desde la fecha elegida, con el servicio y profesional seleccionados.</p><p id="slotNotice" role="status"></p><div id="slots" class="slots"></div><div class="step-actions"><button type="button" id="backToService">Atrás</button><button type="button" class="primary" id="toDetails" disabled>Continuar con mis datos</button></div></section>
+<section class="card" id="step3" hidden><h2 tabindex="-1">Revisa tu cita y completa tus datos</h2><button type="button" id="backToSchedule">Cambiar horario</button><label for="name">Nombre</label><input id="name" autocomplete="name" maxlength="120" required><label for="phone">Teléfono de contacto</label><input id="phone" type="tel" autocomplete="tel" maxlength="30" required><label for="email">Correo (opcional)</label><input id="email" type="email" autocomplete="email" maxlength="254"><label class="offscreen" aria-hidden="true">Página web<input id="website" tabindex="-1" autocomplete="off"></label><p class="muted">Tus datos se entregan a este salón para gestionar la cita.</p><div id="summary">Elige un horario para revisar tu reserva.</div><p id="submitNotice" role="status" tabindex="-1"></p><button class="primary" id="submitBooking" disabled>Confirmar reserva</button><p class="muted">No se realiza ningún cobro en esta página.</p></section></form>
 <section class="card" id="confirmation" hidden><h2 id="confirmationTitle">Tu cita está confirmada</h2><p id="confirmedDetails" style="white-space:pre-line"></p><p id="reference"></p><button type="button" id="saveCalendar" hidden>Guardar en mi calendario</button><p id="calendarHelp" class="muted" hidden>Descarga el archivo y ábrelo en tu calendario. Si la cita cambia o se cancela, actualiza también tu calendario: esta copia no se sincroniza automáticamente.</p><p><a id="manageBooking">Consultar o cancelar mi reserva</a></p><label for="privateLink">Tu enlace privado</label><input id="privateLink" readonly><button type="button" id="copyLink">Copiar enlace privado</button><p id="copyNotice" role="status"></p><p class="muted">Guarda este enlace: permite consultar y cancelar tu cita antes de su inicio, durante un máximo de 180 días. No lo compartas. No se ha enviado un mensaje ni se ha realizado un cobro. Para otros cambios, contacta con el salón.</p></section>
 </main><script>
 (() => {
   const $=id=>document.getElementById(id);
   const id=location.pathname.split('/').filter(Boolean).pop();
   const base='/api/public/salons/'+encodeURIComponent(id);
-  let catalog, selected='', version=0, busy=false;
+  let catalog, selected='', version=0, busy=false, step=1;
   let bookingAttempt=null,attemptStored=false;
   function bookingRequestId(hash){
     const key='bellezaBooking:'+id;
@@ -34,6 +37,56 @@
   function summary() {
     const item=service(), professional=catalog.professionals.find(p=>p.id===$('professional').value);
     return catalog.name+'\n'+(item?item.name+' · '+item.duration_minutes+' minutos · '+(item.price_label||'Consultar precio'):'')+'\n'+(professional?professional.name:'Sin preferencia de profesional')+(selected?'\n'+format(selected):'')+'\nZona horaria: '+catalog.timezone;
+  }
+
+  function updateJourney() {
+    $('toSchedule').disabled=!service();
+    $('toDetails').disabled=!selected;
+    $('selectionPreview').hidden=!service();
+    $('selectionPreview').textContent=service()?summary():'';
+    [1,2,3].forEach(n=>{
+      $('step'+n).hidden=n!==step;
+      const nav=$('stepNav'+n);
+      nav.disabled=busy||n>step;
+      if(n===step)nav.setAttribute('aria-current','step');else nav.removeAttribute('aria-current');
+    });
+    ['name','phone','email'].forEach(key=>$(key).disabled=busy||step!==3);
+  }
+  function goStep(next) {
+    if(busy||!catalog||next>1&&!service()||next===3&&!selected)return;
+    step=next;updateJourney();
+    const heading=$('step'+step).querySelector('h2');
+    heading.focus({preventScroll:true});heading.scrollIntoView({behavior:'smooth',block:'start'});
+  }
+  $('toSchedule').onclick=()=>{goStep(2);if(!selected)searchSlots(false);};
+  $('toDetails').onclick=()=>goStep(3);
+  $('backToService').onclick=()=>goStep(1);
+  $('backToSchedule').onclick=()=>goStep(2);
+  [1,2,3].forEach(n=>$('stepNav'+n).onclick=()=>{if(n<=step)goStep(n);});
+  const normalize=value=>String(value).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+  $('serviceSearch').oninput=()=>{
+    const query=normalize($('serviceSearch').value).trim();let count=0;
+    $('serviceCards').querySelectorAll('article').forEach(card=>{
+      card.hidden=!normalize(card.querySelector('h3').textContent).includes(query);if(!card.hidden)count++;
+    });
+    $('serviceCount').textContent=count?count+' servicios disponibles':'No encontramos ese servicio. Prueba otro nombre.';
+  };
+  function renderDates() {
+    $('quickDates').replaceChildren();
+    for(let offset=0;offset<7;offset++){
+      const day=new Date($('date').value+'T12:00:00Z');if(Number.isNaN(day.getTime()))return;
+      day.setUTCDate(day.getUTCDate()+offset);const value=day.toISOString().slice(0,10);
+      if(value>$('date').max)break;
+      const button=document.createElement('button');button.type='button';
+      button.setAttribute('aria-pressed',String(value===$('date').value));
+      button.setAttribute('aria-label',new Intl.DateTimeFormat('es',{timeZone:'UTC',dateStyle:'full'}).format(day));
+      button.textContent=new Intl.DateTimeFormat('es',{timeZone:'UTC',weekday:'short'}).format(day);
+      const number=document.createElement('strong');number.textContent=String(day.getUTCDate());button.append(number);
+      const closed=catalog.hours?.[day.getUTCDay()]?.open===false;
+      if(closed){button.append('Cerrado');button.disabled=true;}
+      button.onclick=()=>{if(busy)return;$('date').value=value;$('date').dispatchEvent(new Event('change'));searchSlots(false);};
+      $('quickDates').append(button);
+    }
   }
 
   // UTC instants let each calendar display the appointment in its own timezone.
@@ -66,22 +119,22 @@
 
   let slotController=null;
   function finishSearch(){ $('findSlots').disabled=false;$('findNext').disabled=false;$('stopSearch').hidden=true; }
-  function resetSlots() {if(slotController)slotController.abort();slotController=null;finishSearch();version++;selected='';$('slots').replaceChildren();$('submitBooking').disabled=true;$('summary').textContent='Elige un horario para revisar tu reserva.';$('slotNotice').textContent='';}
+  function resetSlots() {if(slotController)slotController.abort();slotController=null;finishSearch();version++;selected='';$('slots').replaceChildren();$('submitBooking').disabled=true;$('summary').textContent='Elige un horario para revisar tu reserva.';$('slotNotice').textContent='';if(catalog)updateJourney();}
   async function api(path,options) {
     const response=await fetch(base+path,options);
     const data=await response.json();
     if(!response.ok)throw new Error(data.error||'No se pudo completar la solicitud.');
     return data;
   }
-  ['service','professional','date'].forEach(key=>$(key).addEventListener('change',()=>{resetSlots();if(catalog){const item=service();$('serviceInfo').textContent=item?item.duration_minutes+' minutos · '+(item.price_label||'Consultar precio'):'';}}));
+  ['service','professional','date'].forEach(key=>$(key).addEventListener('change',()=>{resetSlots();if(catalog){const item=service();$('serviceInfo').textContent=item?item.duration_minutes+' minutos · '+(item.price_label||'Consultar precio'):'';renderDates();updateJourney();}}));
   function showSlots(slots,date) {
-    $('date').value=date;
+    $('date').value=date;renderDates();
     const label=new Intl.DateTimeFormat('es',{timeZone:'UTC',dateStyle:'full'}).format(new Date(date+'T12:00:00Z'));
     $('slotNotice').textContent=slots.length?'Horarios para '+label+'. Selecciona una hora:':'No hay horarios disponibles para esta selección. Prueba otro día o profesional.';
     slots.forEach(iso=>{
       const button=document.createElement('button');button.type='button';button.setAttribute('aria-pressed','false');
       button.textContent=new Intl.DateTimeFormat('es',{timeZone:catalog.timezone,hour:'2-digit',minute:'2-digit',timeZoneName:'short'}).format(new Date(iso));
-      button.onclick=()=>{selected=iso;$('slots').querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b===button)));$('summary').textContent=summary();$('submitBooking').disabled=false;};
+      button.onclick=()=>{selected=iso;$('slots').querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b===button)));$('summary').textContent=summary();$('submitBooking').disabled=false;updateJourney();};
       $('slots').append(button);
     });
   }
@@ -115,9 +168,9 @@
   $('findNext').onclick=()=>searchSlots(true);
   $('stopSearch').onclick=()=>{resetSlots();$('slotNotice').textContent='Búsqueda detenida. Puedes cambiar la fecha o el profesional.';};
   $('bookingForm').onsubmit=async event=>{
-    event.preventDefault();if(busy||!selected)return;
+    event.preventDefault();if(step!==3){if(step===1&&service())$('toSchedule').click();else if(step===2&&selected)goStep(3);return;}if(busy||!selected)return;
     const payload={name:$('name').value.trim(),phone:$('phone').value.trim(),email:$('email').value.trim(),website:$('website').value,serviceId:$('service').value,professionalId:$('professional').value||null,startsAt:selected,date:$('date').value};
-    busy=true;
+    busy=true;$('submitNotice').textContent='Confirmando tu reserva…';
     const controls=[...$('bookingForm').querySelectorAll('input,select,button')];controls.forEach(el=>el.disabled=true);$('notice').textContent='Confirmando tu reserva…';
     try {
       const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(payload)));
@@ -135,8 +188,8 @@
         endsAt:result.endsAt,service:result.serviceName,salon:result.salonName,timezone:result.timezone};
       $('saveCalendar').hidden=result.status!=='confirmed';$('calendarHelp').hidden=result.status!=='confirmed';
       window.scrollTo({top:0,behavior:'smooth'});
-    }catch(error){$('notice').textContent=error.message+(!attemptStored?' No recargues ni cierres esta página. Reintenta con los mismos datos para consultar el resultado sin duplicar la solicitud.':'');}
-    finally{busy=false;controls.forEach(el=>el.disabled=false);$('submitBooking').disabled=!selected;}
+    }catch(error){$('submitNotice').textContent=error.message+(!attemptStored?' No recargues ni cierres esta página. Reintenta con los mismos datos para consultar el resultado sin duplicar la solicitud.':'');$('notice').textContent='';$('submitNotice').focus();}
+    finally{busy=false;controls.forEach(el=>el.disabled=false);$('submitBooking').disabled=!selected;updateJourney();}
   };
   (async()=>{
     try {
@@ -169,7 +222,7 @@
           if(busy)return;
           $('service').value=item.id;$('service').dispatchEvent(new Event('change'));
           $('serviceCards').querySelectorAll('article').forEach(row=>{const active=row===card;row.classList.toggle('chosen',active);const control=row.querySelector('button');control.setAttribute('aria-pressed',String(active));control.textContent=active?'Seleccionado':'Elegir servicio';});
-          $('serviceInfo').textContent='Seleccionaste '+item.name+'. Ahora elige profesional y horario.';
+          $('serviceInfo').textContent='Seleccionaste '+item.name+'. Continúa para elegir profesional y horario.';updateJourney();
         };
         info.append(name,duration,price);card.append(info,button);$('serviceCards').append(card);
       });
@@ -178,7 +231,7 @@
       catalog.professionals.forEach(item=>$('professional').add(new Option(item.name,item.id)));
       $('timezone').textContent='Todos los horarios corresponden a '+catalog.timezone+'.';
       const now=new Date();$('date').value=dateKey(now,catalog.timezone);$('date').min=$('date').value;$('date').max=dateKey(new Date(now.getTime()+89*86400000),catalog.timezone);
-      $('bookingForm').hidden=false;$('notice').textContent='';
+      $('bookingForm').hidden=false;$('notice').textContent='';renderDates();updateJourney();$('serviceSearch').oninput();
     }catch(error){$('notice').textContent=error.message;}
   })();
 })();
