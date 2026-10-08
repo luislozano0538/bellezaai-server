@@ -189,7 +189,7 @@
       $('saveCalendar').hidden=result.status!=='confirmed';$('calendarHelp').hidden=result.status!=='confirmed';
       window.scrollTo({top:0,behavior:'smooth'});
     }catch(error){$('submitNotice').textContent=error.message+(!attemptStored?' No recargues ni cierres esta página. Reintenta con los mismos datos para consultar el resultado sin duplicar la solicitud.':'');$('notice').textContent='';$('submitNotice').focus();}
-    finally{busy=false;controls.forEach(el=>el.disabled=false);$('submitBooking').disabled=!selected;updateJourney();}
+    finally{busy=false;controls.forEach(el=>el.disabled=false);$('submitBooking').disabled=!selected;renderDates();updateJourney();}
   };
   (async()=>{
     try {
