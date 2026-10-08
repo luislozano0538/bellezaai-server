@@ -5,6 +5,9 @@ import net from 'node:net';
 import crypto from 'node:crypto';
 import assert from 'node:assert/strict';
 import pg from 'pg';
+import express from 'express';
+import {createAuthGate} from './auth-limits.js';
+import {registerPasswordRecovery} from './password-recovery.js';
 import {fileURLToPath} from 'node:url';
 
 process.chdir(path.dirname(fileURLToPath(import.meta.url)));
@@ -16,7 +19,7 @@ if(!['127.0.0.1','localhost'].includes(target.hostname)||target.pathname!='/bell
  throw Error('Only a local, disposable belleza_test database is allowed');
 const password=crypto.randomBytes(24).toString('hex');
 async function freePort(){const s=net.createServer();await new Promise((ok,fail)=>s.listen(0,'127.0.0.1',ok).on('error',fail));const port=s.address().port;await new Promise(ok=>s.close(ok));return port;}
-let server,client;
+let server,client,recoveryServer,recoveryPool;
 const results=[];
 try{
  const appPort=await freePort();
@@ -59,10 +62,51 @@ try{
  for(let i=0;i<2;i++)assert.equal((await api(manage+'/cancel','POST',{token:privateToken,expectedStartsAt:moved.data.startsAt})).data.status,'cancelled');
  assert.equal((await client.query('SELECT count(*)::int AS n FROM appointments')).rows[0].n,1);
  assert.equal((await client.query("SELECT count(*)::int AS n FROM reminders WHERE status NOT IN ('cancelled','sent')")).rows[0].n,0);results.push('Cancelación repetida conserva una sola cita y cancela recordatorios');
+
+ // Exercise recovery with real database/HTTP and an in-memory mail transport.
+ // There is no production environment flag or endpoint that exposes tokens.
+ assert.equal((await api('/api/auth/recovery')).data.enabled,false);
+ assert.equal((await api('/api/auth/forgot-password','POST',{email:account.email})).status,503);
+ recoveryPool=new pg.Pool({connectionString});
+ const recoveryApp=express();recoveryApp.use(express.json());const mail=[];
+ registerPasswordRecovery({app:recoveryApp,pool:recoveryPool,gate:createAuthGate(),
+   mailer:{origin:'https://example.invalid',send:async value=>{mail.push(value);}}});
+ recoveryServer=await new Promise(resolve=>{const listener=recoveryApp.listen(0,'127.0.0.1',()=>resolve(listener));});
+ const recoveryBase='http://127.0.0.1:'+recoveryServer.address().port;
+ async function recovery(action,body) {
+   const r=await fetch(recoveryBase+'/api/auth/'+action,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+   return {status:r.status,data:await r.json()};
+ }
+ async function waitMail(count){for(let i=0;i<100&&mail.length<count;i++)await new Promise(r=>setTimeout(r,20));assert.equal(mail.length,count);}
+ const requested=await recovery('forgot-password',{email:account.email});assert.equal(requested.status,202);
+ assert.deepEqual((await recovery('forgot-password',{email:'absent@example.invalid'})),requested);
+ await waitMail(1);
+ const recoveryToken=mail[0].link.split('#')[1];
+ assert.equal((await client.query('SELECT token_hash FROM password_resets')).rows[0].token_hash,crypto.createHash('sha256').update(recoveryToken).digest('hex'));
+ await recovery('forgot-password',{email:account.email});
+ await new Promise(r=>setTimeout(r,100));assert.equal(mail.length,1);
+ const newPassword='New-local-password-'+password;
+ assert.equal((await recovery('reset-password',{token:recoveryToken,password:'short'})).status,400);
+ await client.query("UPDATE password_resets SET expires_at=NOW()-INTERVAL '1 minute'");
+ assert.equal((await recovery('reset-password',{token:recoveryToken,password:newPassword})).status,400);
+ await client.query("UPDATE password_resets SET requested_at=NOW()-INTERVAL '16 minutes'");
+ await recovery('forgot-password',{email:account.email});await waitMail(2);
+ const freshToken=mail[1].link.split('#')[1];
+ assert.notEqual(freshToken,recoveryToken);
+ const changed=await Promise.all([recovery('reset-password',{token:freshToken,password:newPassword}),recovery('reset-password',{token:freshToken,password:newPassword})]);
+ assert.deepEqual(changed.map(r=>r.status).sort(),[200,400]);
+ assert.equal((await recovery('reset-password',{token:freshToken,password:newPassword})).status,400);
+ assert.equal((await api('/api/appointments','GET',null,token)).status,401);
+ assert.equal((await api('/api/auth/login','POST',{email:account.email,password:account.password})).status,401);
+ const renewed=await api('/api/auth/login','POST',{email:account.email,password:newPassword});assert.equal(renewed.status,200);
+ assert.equal((await api('/api/appointments','GET',null,renewed.data.token)).status,200);
+ results.push('Recuperación: caducidad, uso único concurrente, correo simulado, contraseña nueva y sesiones revocadas');
  writeFileSync('integration-result.json',JSON.stringify({passed:true,at:new Date().toISOString(),checks:results,scope:'HTTP API + isolated PostgreSQL; no browser UI'},null,2));
  console.log('PRUEBA COMPLETA DE API APROBADA: '+results.length+' comprobaciones. No se usó Render.');
 }catch(error){writeFileSync('integration-result.json',JSON.stringify({passed:false,at:new Date().toISOString(),completed:results,error:error.message},null,2));console.error('Prueba detenida: '+error.message);process.exitCode=1;}
 finally{
+ if(recoveryServer)await new Promise(r=>recoveryServer.close(r));
+ if(recoveryPool)await recoveryPool.end();
  if(client)await client.end();
  if(server&&server.exitCode===null){server.kill('SIGTERM');await new Promise(ok=>server.once('exit',ok));}
 }
