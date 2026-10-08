@@ -1,0 +1,40 @@
+name: Booking PostgreSQL integration
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  booking:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: isolated
+          POSTGRES_PASSWORD: isolated-test-only
+          POSTGRES_DB: belleza_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U isolated -d belleza_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --ignore-scripts
+      - name: Exercise isolated booking lifecycle
+        run: node booking-postgres.integration.mjs
+        env:
+          TEST_DATABASE_URL: postgresql://isolated:isolated-test-only@127.0.0.1:5432/belleza_test
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: booking-integration-result
+          path: integration-result.json
+          if-no-files-found: ignore
