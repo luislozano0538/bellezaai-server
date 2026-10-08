@@ -7,6 +7,7 @@ import jwt from "jsonwebtoken";
 import pg from "pg";
 import { createAuthGate } from "./auth-limits.js";
 import OpenAI from "openai";
+import {initPasswordRecovery,registerPasswordRecovery} from "./password-recovery.js";
 import { registerClosures, appointmentIsClosed } from "./closures.js";
 import { registerSalonProfile } from "./salon-profile.js";
 import { registerPublicBooking } from "./public-booking.js";
@@ -198,24 +199,19 @@ function requireConfig(res) {
   return true;
 }
 
-function auth(req, res, next) {
-  if (!JWT_SECRET) {
-    return res.status(503).json({
-      error: "JWT_SECRET no configurado."
-    });
-  }
-
+async function auth(req, res, next) {
+  if (!JWT_SECRET) return res.status(503).json({error:"Acceso temporalmente no disponible."});
+  let claims;
+  try { claims=jwt.verify((req.headers.authorization||"").replace("Bearer ",""),JWT_SECRET); }
+  catch { return res.status(401).json({error:"Sesión inválida."}); }
   try {
-    const token = (req.headers.authorization || "")
-      .replace("Bearer ", "");
-
-    req.user = jwt.verify(token, JWT_SECRET);
+    const {rows}=await pool.query("SELECT salon_id,role,session_version FROM users WHERE id=$1",[claims.id]);
+    const user=rows[0];
+    if(!user||user.salon_id!==claims.salonId||user.session_version!==(claims.version??0))
+      return res.status(401).json({error:"Tu sesión terminó. Inicia sesión de nuevo."});
+    req.user={...claims,role:user.role};
     next();
-  } catch {
-    res.status(401).json({
-      error: "Sesión inválida."
-    });
-  }
+  } catch { res.status(503).json({error:"No se pudo verificar tu sesión. Intenta de nuevo."}); }
 }
 
 app.get("/health", async (_req, res) => {
@@ -281,7 +277,7 @@ app.post("/api/auth/register", async (req, res) => {
        VALUES($1,$2,$3,$4,$5,'owner')`,
       [userId, salonId, email, hash, name]
     );
-    const token = jwt.sign({id:userId, salonId, role:"owner"}, JWT_SECRET, {expiresIn:"7d"});
+    const token = jwt.sign({id:userId, salonId, role:"owner",version:0}, JWT_SECRET, {expiresIn:"7d"});
     await client.query("COMMIT");
     inTransaction = false;
     return res.status(201).json({token, salonId});
@@ -316,7 +312,7 @@ app.post("/api/auth/login", async (req, res) => {
       return res.status(401).json({error:"Credenciales incorrectas."});
     }
     const token = jwt.sign(
-      {id:user.id, salonId:user.salon_id, role:user.role},
+      {id:user.id, salonId:user.salon_id, role:user.role,version:user.session_version},
       JWT_SECRET, {expiresIn:"7d"}
     );
     return res.json({token});
@@ -1271,9 +1267,12 @@ registerClosures({app,pool,auth,validBusinessHours});
 registerSalonProfile({app,pool,auth,validBusinessHours});
 registerPublicBooking({app,pool,auth,validBusinessHours,withinBusinessHours,managementSecret:JWT_SECRET});
 
+registerPasswordRecovery({app,pool,gate:authGate});
+
 async function start() {
   try {
     await initDatabase();
+    await initPasswordRecovery(pool);
 
     app.listen(PORT, () => {
       console.log(
