@@ -4,12 +4,12 @@ const fs=require('node:fs');
 const vm=require('node:vm');
 const source=fs.readFileSync(__dirname+'/server.js','utf8');
 const route=source.slice(source.indexOf('app.patch("/api/services/:id"'),source.indexOf('app.post("/api/appointments"'));
-async function run(body, rows) {
+async function run(body, rows, role='owner') {
  let handler, queries=[];
- vm.runInNewContext(route,{app:{patch:(path,auth,fn)=>handler=fn},auth(){},console,
+ vm.runInNewContext(route,{app:{patch:(path,auth,fn)=>{if(path==="/api/services/:id")handler=fn;}},auth(){},console,
  pool:{query:async(sql,params)=>{queries.push({sql,params});return {rows};}}});
  const res={code:200,status(code){this.code=code;return this;},json(value){this.value=value;return this;}};
- await handler({body,params:{id:'11111111-1111-1111-1111-111111111111'},user:{salonId:'salon-a'}},res);
+ await handler({body,params:{id:'11111111-1111-1111-1111-111111111111'},user:{salonId:'salon-a',role}},res);
  return {res,queries};
 }
 test('service edit is scoped to active services of the signed-in salon and leaves appointments untouched',async()=>{
@@ -32,3 +32,4 @@ test('invalid duration is rejected before database access',async()=>{
   assert.equal(res.code,400);assert.equal(queries.length,0);
  }
 });
+

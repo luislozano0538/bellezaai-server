@@ -1,3 +1,4 @@
+const {bookingHelpers}=require('./booking-test-helpers.cjs');
 const {readFileSync} = require('node:fs');
 const vm = require('node:vm');
 const assert = require('node:assert/strict');
@@ -6,13 +7,14 @@ const source = readFileSync(__dirname + '/server.js', 'utf8');
 const start = source.indexOf('app.patch("/api/appointments/:id"');
 const end = source.indexOf('\napp.', start + 1);
 const id = '11111111-1111-4111-8111-111111111111';
-function setup({exists = true, conflict = false, failReminder = false, cancelled = false} = {}) {
+function setup({exists = true, conflict = false, failReminder = false, cancelled = false, closed = false} = {}) {
   let handler, released = false;
   const calls = [];
   const auth = () => {};
   const db = {
     async query(sql, values) {
       calls.push({sql, values});
+      if(sql.includes('FROM salon_closures'))return {rows:closed ? [{id:'closure'}] : []};
       if (sql.includes('FOR UPDATE')) return {rows: exists ? [{id, status: cancelled ? 'cancelled' : 'confirmed', professional_id: null}] : []};
       if (sql.includes('FROM clients')) return {rows: [{id: 'client'}]};
       if (sql.includes('FROM services')) return {rows: [{duration_minutes: 240}]};
@@ -24,7 +26,7 @@ function setup({exists = true, conflict = false, failReminder = false, cancelled
   };
   vm.runInNewContext(source.slice(start, end), {
     app: {patch(path, middleware, fn) {assert.equal(middleware, auth); handler = fn;}},
-    auth, pool: {async connect() {return db;}}, crypto: require('node:crypto'), console: {error() {}}
+    ...bookingHelpers(), auth, pool: {async connect() {return db;}}, crypto: require('node:crypto'), console: {error() {}}
   });
   const res = {code: 200, status(n) {this.code=n; return this;}, json(body) {this.body=body;}};
   return {handler, res, calls, released: () => released};
@@ -37,7 +39,7 @@ test('reschedule updates duration and replaces unsent reminder in one transactio
   assert.equal(t.res.code, 200);
   const lock = t.calls.find(x => x.sql.includes('FOR UPDATE'));
   assert.equal(lock.values[1], 'salon-A');
-  const conflict = t.calls.find(x => x.sql.includes('LIMIT 1'));
+  const conflict = t.calls.find(x => x.sql.includes('FROM appointments') && x.sql.includes('LIMIT 1'));
   assert.match(conflict.sql, /id<>\$2/);
   assert.equal(conflict.values[1], id);
   const update = t.calls.find(x => x.sql.includes('SET client_id'));
@@ -83,4 +85,11 @@ test('cancelled appointment cannot be silently reopened', async () => {
   await t.handler(req(edit), t.res);
   assert.equal(t.res.code, 409);
   assert.equal(t.calls.at(-1).sql, 'ROLLBACK');
+});
+
+test('salon closure rejects reschedule without modifying appointments',async()=>{
+ const t=setup({closed:true});await t.handler(req(edit),t.res);
+ assert.equal(t.res.code,409);assert.ok(t.calls.some(x=>x.sql.includes('FROM salon_closures')));
+ assert.equal(t.calls.some(x=>x.sql.startsWith('UPDATE')),false);
+ assert.equal(t.calls.at(-1).sql,'ROLLBACK');
 });
