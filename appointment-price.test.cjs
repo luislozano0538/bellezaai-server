@@ -1,3 +1,4 @@
+const {bookingHelpers}=require('./booking-test-helpers.cjs');
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const source=fs.readFileSync(__dirname+'/server.js','utf8');
 test('creation snapshots selected service price alongside appointment and reminder',async()=>{
@@ -9,7 +10,7 @@ test('creation snapshots selected service price alongside appointment and remind
  if(sql.includes('INSERT INTO appointments')){write={sql,params};return {rows:[{id:'a'}]};}
  return {rows:[]};
  }};
- vm.runInNewContext(source.slice(start,end),{app:{post:(p,a,f)=>handler=f},auth(){},pool:{connect:async()=>db},crypto:require('node:crypto'),console});
+ vm.runInNewContext(source.slice(start,end),{app:{post:(p,a,f)=>handler=f},...bookingHelpers(),auth(){},pool:{connect:async()=>db},crypto:require('node:crypto'),console});
  const res={code:200,status(c){this.code=c;return this;},json(){}};
  await handler({user:{salonId:'mine'},body:{clientId:'c',serviceId:'s',startsAt:'2099-10-01T14:00Z'}},res);
  assert.equal(res.code,201);assert.equal(write.params[9],'600');

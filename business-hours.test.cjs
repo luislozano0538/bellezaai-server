@@ -1,6 +1,6 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const source=fs.readFileSync(__dirname+'/server.js','utf8');
-const helper=source.slice(source.indexOf('function validBusinessHours'),source.indexOf('app.get("/api/salon/hours"'));
+const {helperSource:helper}=require('./booking-test-helpers.cjs');
 const ctx={Intl,Date};vm.createContext(ctx);vm.runInContext(helper,ctx);
 const hours=()=>({timezone:'America/New_York',days:Array.from({length:7},()=>({open:true,start:'09:00',end:'18:00'}))});
 test('unconfigured hours do not impose invented restrictions',()=>assert.equal(ctx.withinBusinessHours(null,new Date(),new Date()),null));

@@ -1,8 +1,10 @@
+const {bookingHelpers}=require('./booking-test-helpers.cjs');
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const source=fs.readFileSync(__dirname+'/server.js','utf8');
 function setup(method,path){
  let handler,writes=[];
  const db={release(){},async query(sql,params){
+ if(sql.includes('FROM salon_closures'))return {rows:[]};
  if(sql.includes('FOR UPDATE')) return {rows:[{id:'a',status:'confirmed',service_id:'old'}]};
  if(sql.includes('FROM services'))return {rows:[{duration_minutes:45,...(sql.includes('price_label')?{price_label:'600'}:{})}]};
  if(sql.includes('FROM clients'))return {rows:[{id:'c'}]};
@@ -10,7 +12,7 @@ function setup(method,path){
  return {rows:sql.includes('LIMIT 1')?[]:[{id:'a'}]};
  }};
  const start=source.indexOf('app.'+method+'("'+path+'"'),end=source.indexOf('\napp.',start+1);
- vm.runInNewContext(source.slice(start,end),{app:{[method]:(p,a,f)=>handler=f},auth(){},pool:{connect:async()=>db},crypto:require('node:crypto'),console});
+ vm.runInNewContext(source.slice(start,end),{app:{[method]:(p,a,f)=>handler=f},...bookingHelpers(),auth(){},pool:{connect:async()=>db},crypto:require('node:crypto'),console});
  const res={code:200,status(c){this.code=c;return this;},json(v){this.body=v;}};
  return {handler,res,writes};
 }

@@ -1,3 +1,4 @@
+const {bookingHelpers}=require('./booking-test-helpers.cjs');
 const {readFileSync} = require('node:fs');
 const vm = require('node:vm');
 const assert = require('node:assert/strict');
@@ -9,8 +10,9 @@ function route(path, method, query) {
   const end = source.indexOf('\napp.', start + 1);
   const auth = () => {};
   const context = {app: {[method](p, middleware, fn) {assert.equal(middleware, auth); handler = fn;}},
-    auth, pool: {query, async connect() { return {
+    ...bookingHelpers(), auth, pool: {query, async connect() { return {
       async query(sql, values) {
+        if (sql.includes('FROM salon_closures'))return {rows:[]};
         if (['BEGIN', 'COMMIT', 'ROLLBACK'].includes(sql) || sql.includes('pg_advisory_xact_lock')) return {rows: []};
         return query(sql, values);
       }, release() {}
@@ -29,7 +31,7 @@ test('new appointment and reminder use one atomic database statement', async () 
     return {rows: [{id: values[0]}]};
   });
   await t.handler({user: {salonId: 'salon-A'}, body: {
-    clientId: 'client', serviceId: 'service', startsAt: '2026-11-02T10:00:00-05:00'
+    clientId: 'client', serviceId: 'service', startsAt: '2099-11-02T10:00:00-05:00'
   }}, t.res);
   assert.equal(t.res.code, 201);
   assert.equal(writes.length, 1);
@@ -46,7 +48,7 @@ test('conflicting appointments do not create reminders', async () => {
     if (sql.includes('FROM services')) return {rows: [{duration_minutes: 45}]};
     return {rows: [{id: 'existing'}]};
   });
-  await t.handler({user: {salonId: 'A'}, body: {clientId: 'c', serviceId: 's', startsAt: '2026-10-01T10:00:00Z'}}, t.res);
+  await t.handler({user: {salonId: 'A'}, body: {clientId: 'c', serviceId: 's', startsAt: '2099-10-01T10:00:00Z'}}, t.res);
   assert.equal(t.res.code, 409);
 });
 test('failed atomic write never reports success', async () => {
@@ -56,7 +58,7 @@ test('failed atomic write never reports success', async () => {
     if (sql.includes('LIMIT 1')) return {rows: []};
     throw Error('write failed');
   });
-  await t.handler({user: {salonId: 'A'}, body: {clientId: 'c', serviceId: 's', startsAt: '2026-10-01T10:00:00Z'}}, t.res);
+  await t.handler({user: {salonId: 'A'}, body: {clientId: 'c', serviceId: 's', startsAt: '2099-10-01T10:00:00Z'}}, t.res);
   assert.equal(t.res.code, 500);
 });
 test('reminder list uses authenticated salon and excludes cancelled or past appointments', async () => {
