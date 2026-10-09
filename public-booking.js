@@ -1,5 +1,7 @@
 
 import crypto from "crypto";
+import { registerPublicLuna } from "./public-luna.js";
+import OpenAI from "openai";
 import { bookingReceipt, registerPublicManagement } from "./public-management.js";
 
 export function registerPublicBooking({app,pool,auth,validBusinessHours,withinBusinessHours,managementSecret}) {
@@ -17,6 +19,7 @@ export function registerPublicBooking({app,pool,auth,validBusinessHours,withinBu
     next();
   }
   registerPublicManagement({app,pool,limit,secret:managementSecret,availability});
+  registerPublicLuna({app,pool,limit,salon,availability,OpenAI});
   async function salon(db,id) {
     if(!uuid(id)) throw fail(404,"Página de reservas no disponible.");
     const result=await db.query("SELECT id,name,business_hours FROM salons WHERE id=$1 AND public_booking_enabled=true FOR SHARE",[id]);
