@@ -2,7 +2,8 @@ import crypto from "node:crypto";
 
 const uuid = value => typeof value === "string" &&
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
-const MAX_PHOTOS = 18;
+const MAX_PHOTOS = 50;
+const CATEGORIES = new Set(['Uñas','Cabello','Pestañas','Cejas','Depilación','Otros']);
 const maxImageDataLength = 220000;
 
 function decodePhoto(value) {
@@ -25,9 +26,11 @@ export async function initSalonGallery(pool) {
       id UUID PRIMARY KEY,
       salon_id UUID NOT NULL REFERENCES salons(id) ON DELETE CASCADE,
       caption TEXT NOT NULL DEFAULT '',
+      category TEXT NOT NULL DEFAULT 'Otros',
       image_data TEXT NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+    ALTER TABLE salon_gallery_photos ADD COLUMN IF NOT EXISTS category TEXT NOT NULL DEFAULT 'Otros';
     CREATE INDEX IF NOT EXISTS idx_salon_gallery_photos
       ON salon_gallery_photos (salon_id,created_at DESC,id DESC);
   `);
@@ -38,7 +41,7 @@ export function registerSalonGallery({app,pool,auth}) {
     res.set("Cache-Control","no-store");
     try {
       const result = await pool.query(
-        'SELECT id,caption,image_data AS "imageData",created_at AS "createdAt" FROM salon_gallery_photos WHERE salon_id=$1 ORDER BY created_at DESC,id DESC LIMIT 18',
+        'SELECT id,caption,category,image_data AS "imageData",created_at AS "createdAt" FROM salon_gallery_photos WHERE salon_id=$1 ORDER BY created_at DESC,id DESC LIMIT 50',
         [req.user.salonId]
       );
       res.json({photos:result.rows,maxPhotos:MAX_PHOTOS});
@@ -50,8 +53,8 @@ export function registerSalonGallery({app,pool,auth}) {
   app.post("/api/salon/gallery", auth, async (req,res) => {
     res.set("Cache-Control","no-store");
     if (req.user.role !== "owner") return res.status(403).json({error:"Solo el propietario puede subir fotos."});
-    const {caption="",imageData} = req.body || {};
-    if (typeof caption !== "string" || caption.length > 120 || !decodePhoto(imageData))
+    const {caption="",category="Otros",imageData} = req.body || {};
+    if (typeof caption !== "string" || caption.length > 120 || !CATEGORIES.has(category) || !decodePhoto(imageData))
       return res.status(400).json({error:"Elige una foto JPG, PNG o WebP válida y una descripción breve."});
     let db,committed=false;
     try {
@@ -61,12 +64,12 @@ export function registerSalonGallery({app,pool,auth}) {
       const count = await db.query("SELECT COUNT(*)::int AS total FROM salon_gallery_photos WHERE salon_id=$1",[req.user.salonId]);
       if (count.rows[0].total >= MAX_PHOTOS) {
         await db.query("ROLLBACK");
-        return res.status(409).json({error:"Tu galería ya tiene 18 fotos. Quita alguna antes de subir otra."});
+        return res.status(409).json({error:"Tu galería ya tiene 50 fotos. Quita alguna antes de subir otra."});
       }
       const id=crypto.randomUUID();
       const result=await db.query(
-        'INSERT INTO salon_gallery_photos(id,salon_id,caption,image_data) VALUES($1,$2,$3,$4) RETURNING id,caption,image_data AS "imageData",created_at AS "createdAt"',
-        [id,req.user.salonId,caption.trim(),imageData]
+        'INSERT INTO salon_gallery_photos(id,salon_id,caption,category,image_data) VALUES($1,$2,$3,$4,$5) RETURNING id,caption,category,image_data AS "imageData",created_at AS "createdAt"',
+        [id,req.user.salonId,caption.trim(),category,imageData]
       );
       await db.query("COMMIT");committed=true;
       res.status(201).json({photo:result.rows[0]});
@@ -102,11 +105,11 @@ export function registerSalonGallery({app,pool,auth}) {
       const shop = await pool.query("SELECT id FROM salons WHERE id=$1 AND public_booking_enabled=true",[req.params.salonId]);
       if (!shop.rows[0]) return res.status(404).json({error:"Galería no disponible."});
       const result=await pool.query(
-        "SELECT id,caption FROM salon_gallery_photos WHERE salon_id=$1 ORDER BY created_at DESC,id DESC LIMIT 18",
+        "SELECT id,caption,category FROM salon_gallery_photos WHERE salon_id=$1 ORDER BY created_at DESC,id DESC LIMIT 50",
         [req.params.salonId]
       );
       res.json({photos:result.rows.map(row=>({
-        id:row.id,caption:row.caption,
+        id:row.id,caption:row.caption,category:row.category,
         imageUrl:"/api/public/salons/"+req.params.salonId+"/gallery/"+row.id+"/image"
       }))});
     } catch {
