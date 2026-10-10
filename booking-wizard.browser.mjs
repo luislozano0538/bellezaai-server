@@ -6,6 +6,11 @@ const html=fs.readFileSync(new URL('./booking.html',import.meta.url));
 const catalog={name:'Salón de demostración',timezone:'America/New_York',profile:{description:'Vista de prueba. Datos ficticios.'},hours:Array.from({length:7},(_,i)=>({open:i!==0,start:'09:00',end:'18:00'})),services:[{id:'cut',name:'Corte de pelo',duration_minutes:45,price_label:'50'},{id:'color',name:'Balayage',duration_minutes:240,price_label:'600'},{id:'style',name:'Peinado clásico',duration_minutes:60,price_label:'80'}],professionals:[{id:'pro',name:'Profesional de prueba'}]};
 let attempts=[];
 const server=http.createServer(async(req,res)=>{
+  // Serve newly added static gallery script without changing the mocked booking flow.
+  if(req.url==='/salon-gallery-public.js'){
+    res.setHeader('Content-Type','application/javascript');
+    return res.end(fs.readFileSync(new URL('./salon-gallery-public.js',import.meta.url)));
+  }
   res.setHeader('Content-Type',req.url.startsWith('/api')?'application/json':'text/html');
   if(req.url.includes('/slots?')){
     const d=new URL(req.url,'http://localhost').searchParams.get('date');

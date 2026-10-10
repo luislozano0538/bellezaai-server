@@ -10,6 +10,7 @@ import OpenAI from "openai";
 import {initPasswordRecovery,registerPasswordRecovery} from "./password-recovery.js";
 import { registerClosures, appointmentIsClosed } from "./closures.js";
 import { registerSalonProfile } from "./salon-profile.js";
+import {initSalonGallery,registerSalonGallery} from "./salon-gallery.js";
 import { registerPublicBooking } from "./public-booking.js";
 
 const { Pool } = pg;
@@ -24,6 +25,10 @@ app.use(express.json({ limit: "1mb" }));
 app.get("/", (_req, res) => {
   res.sendFile("index.html", { root: process.cwd() });
 });
+app.get("/salon-gallery-ui.js", (_req,res) =>
+  res.type("application/javascript").sendFile("salon-gallery-ui.js", {root:process.cwd()}));
+app.get("/salon-gallery-public.js", (_req,res) =>
+  res.type("application/javascript").sendFile("salon-gallery-public.js", {root:process.cwd()}));
 async function initDatabase() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS salons (
@@ -1291,6 +1296,7 @@ app.post("/api/messages/send", auth, (_req, res) => {
 
 registerClosures({app,pool,auth,validBusinessHours});
 registerSalonProfile({app,pool,auth,validBusinessHours});
+registerSalonGallery({app,pool,auth});
 chatAvailability = registerPublicBooking({app,pool,auth,validBusinessHours,withinBusinessHours,managementSecret:JWT_SECRET});
 
 registerPasswordRecovery({app,pool,gate:authGate});
@@ -1298,6 +1304,7 @@ registerPasswordRecovery({app,pool,gate:authGate});
 async function start() {
   try {
     await initDatabase();
+    await initSalonGallery(pool);
     await initPasswordRecovery(pool);
 
     app.listen(PORT, () => {

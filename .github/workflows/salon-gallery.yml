@@ -1,0 +1,28 @@
+name: Salon photo gallery checks
+on:
+  pull_request:
+    paths:
+      - 'salon-gallery.js'
+      - 'salon-gallery-ui.js'
+      - 'salon-gallery-public.js'
+      - 'salon-gallery.test.mjs'
+      - 'server.js'
+      - 'booking.html'
+      - 'index.html'
+      - '.github/workflows/salon-gallery.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  gallery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify JavaScript syntax
+        run: node --check server.js && node --check salon-gallery.js && node --check salon-gallery-ui.js && node --check salon-gallery-public.js
+      - name: Test gallery
+        run: node --test salon-gallery.test.mjs
