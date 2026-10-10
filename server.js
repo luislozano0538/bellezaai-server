@@ -10,6 +10,7 @@ import OpenAI from "openai";
 import {initPasswordRecovery,registerPasswordRecovery} from "./password-recovery.js";
 import { registerClosures, appointmentIsClosed } from "./closures.js";
 import { registerSalonProfile } from "./salon-profile.js";
+import {initSalonGallery,registerSalonGallery} from "./salon-gallery.js";
 import { registerPublicBooking } from "./public-booking.js";
 
 const { Pool } = pg;
@@ -1291,6 +1292,7 @@ app.post("/api/messages/send", auth, (_req, res) => {
 
 registerClosures({app,pool,auth,validBusinessHours});
 registerSalonProfile({app,pool,auth,validBusinessHours});
+registerSalonGallery({app,pool,auth});
 chatAvailability = registerPublicBooking({app,pool,auth,validBusinessHours,withinBusinessHours,managementSecret:JWT_SECRET});
 
 registerPasswordRecovery({app,pool,gate:authGate});
@@ -1298,6 +1300,7 @@ registerPasswordRecovery({app,pool,gate:authGate});
 async function start() {
   try {
     await initDatabase();
+    await initSalonGallery(pool);
     await initPasswordRecovery(pool);
 
     app.listen(PORT, () => {
