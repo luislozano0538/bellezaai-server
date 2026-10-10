@@ -25,6 +25,10 @@ app.use(express.json({ limit: "1mb" }));
 app.get("/", (_req, res) => {
   res.sendFile("index.html", { root: process.cwd() });
 });
+app.get("/salon-gallery-ui.js", (_req,res) =>
+  res.type("application/javascript").sendFile("salon-gallery-ui.js", {root:process.cwd()}));
+app.get("/salon-gallery-public.js", (_req,res) =>
+  res.type("application/javascript").sendFile("salon-gallery-public.js", {root:process.cwd()}));
 async function initDatabase() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS salons (
