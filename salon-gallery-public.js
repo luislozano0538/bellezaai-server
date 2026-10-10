@@ -17,7 +17,18 @@
   subtitle.style.color="#e0d2bc";
   const grid=document.createElement("div");
   grid.style.cssText="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px";
-  section.append(heading,subtitle,grid);
+  const filter=document.createElement("select");
+  filter.setAttribute("aria-label","Filtrar trabajos por servicio");
+  filter.style.cssText="display:block;width:100%;margin:14px 0 16px;padding:12px;background:#27221d;color:#f8e8cb;border:1px solid #ad905e;border-radius:12px;font-size:16px";
+  for (const name of ["Todos","Uñas","Cabello","Pestañas","Cejas","Depilación","Otros"]) {
+    const option=document.createElement("option");option.value=name;option.textContent=name;filter.append(option);
+  }
+  filter.onchange=()=>{
+    grid.querySelectorAll("figure").forEach(figure=>{
+      figure.hidden=filter.value!=="Todos"&&figure.dataset.category!==filter.value;
+    });
+  };
+  section.append(heading,subtitle,filter,grid);
   profile.after(section);
 
   fetch("/api/public/salons/"+encodeURIComponent(salonId)+"/gallery",{cache:"no-store"})
@@ -27,6 +38,7 @@
       photos.forEach(photo=>{
         if(typeof photo.imageUrl!=="string" || !photo.imageUrl.startsWith("/api/public/salons/"+salonId+"/gallery/"))return;
         const figure=document.createElement("figure");
+        figure.dataset.category=photo.category||"Otros";
         figure.style.cssText="margin:0;border-radius:12px;overflow:hidden;background:#24201b";
         const img=document.createElement("img");
         img.src=photo.imageUrl;img.loading="lazy";img.alt=photo.caption||"Foto de un trabajo del salón";
