@@ -69,9 +69,13 @@ export function registerPublicLuna({app,pool,limit,salon,availability,OpenAI}){
       if(requestedClock){
        const available=result.localSlots.some(slot=>slot.time===requestedClock);
        result.requestedTime={time:requestedClock,available};
+       const locale=english?'en-US':'es';
+       const currentYear=new Intl.DateTimeFormat('en',{timeZone:result.timezone,year:'numeric'}).format(new Date());
+       const dateLabel=new Intl.DateTimeFormat(locale,{timeZone:'UTC',weekday:'long',day:'numeric',month:'long',...(args.date.slice(0,4)!==currentYear?{year:'numeric'}:{})}).format(new Date(args.date+'T12:00:00Z'));
+       const timeLabel=new Intl.DateTimeFormat(locale,{timeZone:'UTC',hour:'numeric',minute:'2-digit',hour12:true}).format(new Date('2000-01-01T'+requestedClock+':00Z'));
        checkedClock=available
-        ? (english?`${args.date} at ${requestedClock} is available for ${data.service.name}. To prepare the booking, tell me your name and phone number.`:`El ${args.date} a las ${requestedClock} está disponible para ${data.service.name}. Para preparar la reserva, dime tu nombre y teléfono.`)
-        : (english?`${args.date} at ${requestedClock} is not available for ${data.service.name}. Please choose another time.`:`El ${args.date} a las ${requestedClock} no está disponible para ${data.service.name}. Consulta otro horario.`);
+        ? (english?`Yes, ${dateLabel} at ${timeLabel} is available for ${data.service.name}. To prepare your booking, please share your name and phone number.`:`Sí, el ${dateLabel} a las ${timeLabel} está disponible para ${data.service.name}. Para preparar tu reserva, indícame tu nombre y teléfono.`)
+        : (english?`${dateLabel} at ${timeLabel} is not available for ${data.service.name}. Would you like to check another time?`:`El ${dateLabel} a las ${timeLabel} no está disponible para ${data.service.name}. ¿Quieres que consulte otro horario?`);
       }
       if(call.name==='preparar_reserva'){
        if(!result.slots.includes(args.startsAt))throw Error('Ese horario ya no está disponible. Consulta de nuevo.');
