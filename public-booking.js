@@ -135,4 +135,5 @@ export function registerPublicBooking({app,pool,auth,validBusinessHours,withinBu
     }catch(error){console.error("Public booking:",error.status||500);res.status(error.status||500).json({error:error.status?error.message:"No se pudo confirmar la reserva. Puedes reintentar sin duplicarla."});}
     finally{if(db){if(!committed)await db.query("ROLLBACK").catch(()=>{});db.release();}}
   });
+  return availability; // Reuse the same validated lookup in authenticated Luna.
 }

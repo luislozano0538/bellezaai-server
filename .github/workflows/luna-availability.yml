@@ -1,0 +1,27 @@
+name: Luna availability checks
+on:
+  pull_request:
+    paths:
+      - 'server.js'
+      - 'public-booking.js'
+      - 'public-luna.js'
+      - 'chat-availability.test.cjs'
+      - 'chat-catalog.test.cjs'
+      - 'public-luna.test.mjs'
+      - '.github/workflows/luna-availability.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  chat:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate server syntax
+        run: node --check server.js && node --check public-booking.js
+      - name: Test Luna and existing chat behavior
+        run: node --test chat-availability.test.cjs chat-catalog.test.cjs public-luna.test.mjs
