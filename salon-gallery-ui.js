@@ -12,7 +12,7 @@
     #galleryModal .sheet{background:#151515;color:#f8f1e5;border-top:2px solid #b99b61}
     #galleryModal .close{background:#2b2825;color:#fff}
     #galleryModal .form label,#galleryModal .small{color:#e6d6bd}
-    #galleryModal .form input{background:#252525;color:#fff;border-color:#695634}
+    #galleryModal .form input,#galleryModal .form select{background:#252525;color:#fff;border-color:#695634}
     #galleryModal .primary{background:linear-gradient(135deg,#8c6a37,#c8a873);color:#111}
     .gallery-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:16px 0}
     .gallery-tile{background:#24211c;border:1px solid #665333;border-radius:15px;overflow:hidden}
@@ -37,12 +37,13 @@
   modal.innerHTML=`
    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="galleryTitle">
     <div class="sheetbar"><h2 id="galleryTitle">Galería de trabajos</h2><button type="button" class="close" aria-label="Cerrar">×</button></div>
-    <p class="small">Muestra uñas, cabello, pestañas y otros trabajos reales del salón. Hasta 18 fotografías.</p>
+    <p class="small">Muestra uñas, cabello, pestañas y otros trabajos reales del salón. Hasta 50 fotografías.</p>
     <p id="galleryStatus" role="status"></p>
     <div id="galleryGrid" class="gallery-grid"></div>
     <form id="galleryForm" class="form">
      <label for="galleryFile">Añadir foto desde tu teléfono
        <input id="galleryFile" name="photo" type="file" accept="image/jpeg,image/png,image/webp" required></label>
+     <label for="galleryCategory">Tipo de trabajo<select id="galleryCategory" name="category"><option>Uñas</option><option>Cabello</option><option>Pestañas</option><option>Cejas</option><option>Depilación</option><option>Otros</option></select></label>
      <label for="galleryCaption">Descripción (opcional)
        <input id="galleryCaption" name="caption" type="text" maxlength="120" placeholder="Ej.: Balayage dorado"></label>
      <button class="primary" type="submit">Guardar fotografía</button>
@@ -100,7 +101,7 @@
     photos.forEach(item=>{
       const tile=document.createElement("div");tile.className="gallery-tile";
       const img=document.createElement("img");img.src=item.imageData;img.alt=item.caption||"Trabajo del salón";img.loading="lazy";
-      const caption=document.createElement("p");caption.textContent=item.caption||"Trabajo del salón";
+      const caption=document.createElement("p");caption.textContent=(item.category||"Otros")+(item.caption?" · "+item.caption:"");
       tile.append(img,caption);
       if (owner) {
         const remove=document.createElement("button");remove.type="button";remove.className="gallery-remove";
@@ -117,8 +118,8 @@
       }
       grid.append(tile);
     });
-    form.hidden=!owner || photos.length>=18;
-    if (owner && photos.length>=18) status.textContent="Límite de 18 fotos. Quita alguna para añadir otra.";
+    form.hidden=!owner || photos.length>=50;
+    if (owner && photos.length>=50) status.textContent="Límite de 50 fotos. Quita alguna para añadir otra.";
   }
   async function load(showModal=false) {
     const current=++version;
@@ -129,7 +130,7 @@
       ]);
       if(current!==version)return;
       photos=gallery.photos||[];owner=profile.role==="owner";
-      render();if(showModal)status.textContent=photos.length+" de 18 fotos guardadas.";
+      render();if(showModal)status.textContent=photos.length+" de 50 fotos guardadas.";
     }catch(error){if(showModal && current===version) status.textContent=error.message;}
   }
   async function open(){if (busy)return;form.reset();await load(true);}
@@ -143,7 +144,8 @@
     try {
       const imageData=await compress(file);
       const caption=modal.querySelector("#galleryCaption").value.trim();
-      const result=await api("/api/salon/gallery","POST",{imageData,caption});
+      const category=modal.querySelector("#galleryCategory").value;
+      const result=await api("/api/salon/gallery","POST",{imageData,caption,category});
       photos.unshift(result.photo);form.reset();render();status.textContent="Foto guardada y disponible en la página de reservas.";
     }catch(error){status.textContent=error.message;}
     finally{busy=false;form.querySelector("button[type=submit]").disabled=false;}
