@@ -418,7 +418,7 @@ app.get("/api/profile", auth, async (req, res) => {
   try {
     const q = await pool.query("SELECT name FROM users WHERE id=$1 AND salon_id=$2", [req.user.id, req.user.salonId]);
     if (!q.rows.length) return res.status(404).json({error:"Cuenta no encontrada."});
-    res.json({name:q.rows[0].name});
+    res.json({name:q.rows[0].name,role:req.user.role});
   } catch {
     res.status(500).json({error:"No se pudo cargar el perfil."});
   }
