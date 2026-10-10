@@ -73,9 +73,17 @@ export function registerPublicLuna({app,pool,limit,salon,availability,OpenAI}){
        const currentYear=new Intl.DateTimeFormat('en',{timeZone:result.timezone,year:'numeric'}).format(new Date());
        const dateLabel=new Intl.DateTimeFormat(locale,{timeZone:'UTC',weekday:'long',day:'numeric',month:'long',...(args.date.slice(0,4)!==currentYear?{year:'numeric'}:{})}).format(new Date(args.date+'T12:00:00Z'));
        const timeLabel=new Intl.DateTimeFormat(locale,{timeZone:'UTC',hour:'numeric',minute:'2-digit',hour12:true}).format(new Date('2000-01-01T'+requestedClock+':00Z'));
+       const minutes=clock=>Number(clock.slice(0,2))*60+Number(clock.slice(3));
+       const alternatives=[...result.localSlots]
+        .sort((a,b)=>Math.abs(minutes(a.time)-minutes(requestedClock))-Math.abs(minutes(b.time)-minutes(requestedClock))||a.time.localeCompare(b.time))
+        .slice(0,3).sort((a,b)=>a.time.localeCompare(b.time))
+        .map(slot=>new Intl.DateTimeFormat(locale,{timeZone:result.timezone,hour:'numeric',minute:'2-digit',hour12:true}).format(new Date(slot.startsAt)));
+       const options=new Intl.ListFormat(locale,{style:'long',type:'conjunction'}).format(alternatives);
        checkedClock=available
         ? (english?`Yes, ${dateLabel} at ${timeLabel} is available for ${data.service.name}. To prepare your booking, please share your name and phone number.`:`Sí, el ${dateLabel} a las ${timeLabel} está disponible para ${data.service.name}. Para preparar tu reserva, indícame tu nombre y teléfono.`)
-        : (english?`${dateLabel} at ${timeLabel} is not available for ${data.service.name}. Would you like to check another time?`:`El ${dateLabel} a las ${timeLabel} no está disponible para ${data.service.name}. ¿Quieres que consulte otro horario?`);
+        : alternatives.length
+         ? (english?`That time is not available. I have ${options} available. Which would you prefer?`:`Ese horario no está disponible. Tengo disponibles las ${options}. ¿Cuál prefieres?`)
+         : (english?'There are no available times that day for this service. Would you like to check another day?':'Ese día no quedan horarios disponibles para este servicio. ¿Quieres que consulte otro día?');
       }
       if(call.name==='preparar_reserva'){
        if(!result.slots.includes(args.startsAt))throw Error('Ese horario ya no está disponible. Consulta de nuevo.');
