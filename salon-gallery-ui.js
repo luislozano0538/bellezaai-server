@@ -51,9 +51,10 @@
    </div>`;
   app.append(modal);
   const grid=modal.querySelector("#galleryGrid");
+  const more=document.createElement("button");more.type="button";more.className="gallery-entry";more.textContent="Ver más fotos";more.hidden=true;grid.after(more);
   const status=modal.querySelector("#galleryStatus");
   const form=modal.querySelector("#galleryForm");
-  let busy=false,photos=[],owner=false,version=0;
+  let busy=false,photos=[],owner=false,version=0,total=0,nextOffset=null;
 
   async function api(path,method="GET",body) {
     const token=localStorage.getItem("bellezaAIToken");
@@ -111,29 +112,44 @@
           busy=true;remove.disabled=true;status.textContent="Quitando foto…";
           try {
             await api("/api/salon/gallery/"+encodeURIComponent(item.id),"DELETE");
-            photos=photos.filter(x=>x.id!==item.id);render();status.textContent="Foto quitada.";
+            photos=photos.filter(x=>x.id!==item.id);total=Math.max(0,total-1);
+            if(nextOffset!==null)nextOffset=Math.max(0,nextOffset-1);
+            render();status.textContent="Foto quitada.";
           } catch(error){status.textContent=error.message;} finally{busy=false;}
         };
         tile.append(remove);
       }
       grid.append(tile);
     });
-    form.hidden=!owner || photos.length>=50;
-    if (owner && photos.length>=50) status.textContent="Límite de 50 fotos. Quita alguna para añadir otra.";
+    more.hidden=nextOffset===null;
+    more.disabled=busy;
+    form.hidden=!owner || total>=50;
+    if (owner && total>=50) status.textContent="Límite de 50 fotos. Quita alguna para añadir otra.";
   }
   async function load(showModal=false) {
     const current=++version;
     if(showModal){openModal("galleryModal");status.textContent="Cargando fotos…";}
     try {
       const [gallery,profile]=await Promise.all([
-        api("/api/salon/gallery"),api("/api/profile")
+        api("/api/salon/gallery?offset=0&limit="+(showModal?12:3)),api("/api/profile")
       ]);
       if(current!==version)return;
       photos=gallery.photos||[];owner=profile.role==="owner";
-      render();if(showModal)status.textContent=photos.length+" de 50 fotos guardadas.";
+      total=gallery.total||0;nextOffset=showModal?gallery.nextOffset:null;
+      render();if(showModal)status.textContent=total+" de 50 fotos guardadas.";
     }catch(error){if(showModal && current===version) status.textContent=error.message;}
   }
   async function open(){if (busy)return;form.reset();await load(true);}
+  more.onclick=async()=>{
+    if(busy||nextOffset===null)return;
+    busy=true;more.disabled=true;status.textContent="Cargando más fotos…";
+    try{
+      const gallery=await api("/api/salon/gallery?offset="+nextOffset);
+      photos.push(...(gallery.photos||[]));nextOffset=gallery.nextOffset;total=gallery.total||0;
+      render();status.textContent=total+" de 50 fotos guardadas.";
+    }catch(error){status.textContent=error.message;}
+    finally{busy=false;more.disabled=false;}
+  };
   entry.onclick=settingsEntry.onclick=open;
   form.addEventListener("submit",async event=>{
     event.preventDefault();if(busy||!owner)return;
@@ -146,7 +162,9 @@
       const caption=modal.querySelector("#galleryCaption").value.trim();
       const category=modal.querySelector("#galleryCategory").value;
       const result=await api("/api/salon/gallery","POST",{imageData,caption,category});
-      photos.unshift(result.photo);form.reset();render();status.textContent="Foto guardada y disponible en la página de reservas.";
+      photos.unshift(result.photo);total++;
+      if(nextOffset!==null)nextOffset++;
+      form.reset();render();status.textContent="Foto guardada y disponible en la página de reservas.";
     }catch(error){status.textContent=error.message;}
     finally{busy=false;form.querySelector("button[type=submit]").disabled=false;}
   });
