@@ -17,7 +17,7 @@ function fixture({toolError=false,empty=false}={}){
     app:{post(path,middleware,fn){assert.equal(path,'/api/chat');handler=fn;}},
     auth(){},pool,console:{error(){}},process:{env:{OPENAI_API_KEY:'fake-test-key'}},
     OpenAI:class{responses={create:async args=>{
-      aiCalls.push(structuredClone(args));
+      aiCalls.push(args);
       if(empty)return {output:[],output_text:''};
       if(aiCalls.length===1)return {output:[{type:'function_call',name:'consultar_horarios',call_id:'lookup1',arguments:JSON.stringify({serviceId:'svc',professionalId:null,date:'2030-01-01'})}]};
       return {output:[],output_text:'A las 10:00 hay disponibilidad; la cita no está reservada.'};
