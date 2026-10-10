@@ -40,11 +40,20 @@ export function registerSalonGallery({app,pool,auth}) {
   app.get("/api/salon/gallery", auth, async (req,res) => {
     res.set("Cache-Control","no-store");
     try {
-      const result = await pool.query(
-        'SELECT id,caption,category,image_data AS "imageData",created_at AS "createdAt" FROM salon_gallery_photos WHERE salon_id=$1 ORDER BY created_at DESC,id DESC LIMIT 50',
+      const rawOffset=Number(req.query?.offset ?? 0);
+      const rawLimit=Number(req.query?.limit ?? 12);
+      const offset=Number.isInteger(rawOffset)&&rawOffset>=0&&rawOffset<=MAX_PHOTOS?rawOffset:0;
+      const limit=Number.isInteger(rawLimit)&&rawLimit>=1&&rawLimit<=12?rawLimit:12;
+      const total=(await pool.query(
+        "SELECT COUNT(*)::int AS total FROM salon_gallery_photos WHERE salon_id=$1",
         [req.user.salonId]
+      )).rows[0].total;
+      const result=await pool.query(
+        'SELECT id,caption,category,image_data AS "imageData",created_at AS "createdAt" FROM salon_gallery_photos WHERE salon_id=$1 ORDER BY created_at DESC,id DESC LIMIT $2 OFFSET $3',
+        [req.user.salonId,limit,offset]
       );
-      res.json({photos:result.rows,maxPhotos:MAX_PHOTOS});
+      const nextOffset=offset+result.rows.length<total?offset+result.rows.length:null;
+      res.json({photos:result.rows,total,nextOffset,maxPhotos:MAX_PHOTOS});
     } catch {
       res.status(500).json({error:"No se pudo cargar la galería."});
     }
