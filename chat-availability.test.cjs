@@ -42,7 +42,7 @@ test('in-app Luna uses authenticated salon only and returns real database slots 
   assert.equal(res.code,200);
   assert.equal(f.lookups.length,1);
   assert.deepEqual(f.lookups[0],['my-salon','svc',null,'2030-01-01']);
-  assert.match(f.aiCalls[0].instructions,/never claim an appointment has been booked/i);
+  assert.match(f.aiCalls[0].instructions,/do not claim an appointment has been booked/i);
   assert.match(f.aiCalls[1].input.at(-1).output,/2030-01-01T15:00:00\.000Z/);
   assert.equal(res.body.reply.includes('no está reservada'),true);
 });
