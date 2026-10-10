@@ -6,7 +6,9 @@ const functionCall=(name,args)=>({output:[{type:'function_call',name,arguments:J
 test('occupied local time cannot be advertised by an incorrect model reply',async()=>{
  const f=fixture([functionCall('consultar_horarios',{serviceId:'service',professionalId:null,date:'2030-01-01'}),{output_text:'Sí, está disponible.'}]);
  const res=await f.request({message:'¿Está disponible a las 11:15 am?'});
- assert.match(res.body.reply,/11:15.*no está disponible/);
+ assert.match(res.body.reply,/Ese horario no está disponible/);
+ assert.match(res.body.reply,/10:00/);
+ assert.doesNotMatch(res.body.reply,/2030|enero|11:15/);
  assert.equal(res.body.proposal,null);
 });
 test('availability compares salon local time rather than UTC clock',async()=>{
