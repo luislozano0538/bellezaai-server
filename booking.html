@@ -37,7 +37,7 @@
   const service=()=>catalog.services.find(s=>s.id===$('service').value);
   function summary() {
     const item=service(), professional=catalog.professionals.find(p=>p.id===$('professional').value);
-    return catalog.name+'\n'+(item?item.name+' · '+item.duration_minutes+' minutos · '+(item.price_label||'Consultar precio'):'')+'\n'+(professional?professional.name:'Sin preferencia de profesional')+(selected?'\n'+format(selected):'')+'\nZona horaria: '+catalog.timezone;
+    return catalog.name+'\n'+(item?item.name+' · '+item.duration_minutes+' minutos':'')+'\n'+(professional?professional.name:'Sin preferencia de profesional')+(selected?'\n'+format(selected):'')+'\nZona horaria: '+catalog.timezone;
   }
 
   function updateJourney() {
@@ -127,7 +127,7 @@
     if(!response.ok)throw new Error(data.error||'No se pudo completar la solicitud.');
     return data;
   }
-  ['service','professional','date'].forEach(key=>$(key).addEventListener('change',()=>{resetSlots();if(catalog){const item=service();$('serviceInfo').textContent=item?item.duration_minutes+' minutos · '+(item.price_label||'Consultar precio'):'';renderDates();updateJourney();}}));
+  ['service','professional','date'].forEach(key=>$(key).addEventListener('change',()=>{resetSlots();if(catalog){const item=service();$('serviceInfo').textContent=item?item.duration_minutes+' minutos':'';renderDates();updateJourney();}}));
   function showSlots(slots,date) {
     $('date').value=date;renderDates();
     const label=new Intl.DateTimeFormat('es',{timeZone:'UTC',dateStyle:'full'}).format(new Date(date+'T12:00:00Z'));
@@ -181,7 +181,7 @@
       $('bookingForm').hidden=true;$('confirmation').hidden=false;
       const states={confirmed:'Tu cita está confirmada',cancelled:'Esta cita está cancelada',completed:'Esta cita está completada',no_show:'Esta cita figura como no asistida'};
       $('confirmationTitle').textContent=states[result.status]||'Tu reserva';
-      $('confirmedDetails').textContent=result.salonName+'\n'+result.serviceName+' · '+Math.round((new Date(result.endsAt)-new Date(result.startsAt))/60000)+' minutos · '+(result.price||'Consultar precio')+'\n'+result.professionalName+'\n'+new Intl.DateTimeFormat('es',{timeZone:result.timezone,dateStyle:'full',timeStyle:'short'}).format(new Date(result.startsAt))+'\nZona horaria: '+result.timezone;
+      $('confirmedDetails').textContent=result.salonName+'\n'+result.serviceName+' · '+Math.round((new Date(result.endsAt)-new Date(result.startsAt))/60000)+' minutos'+'\n'+result.professionalName+'\n'+new Intl.DateTimeFormat('es',{timeZone:result.timezone,dateStyle:'full',timeStyle:'short'}).format(new Date(result.startsAt))+'\nZona horaria: '+result.timezone;
       $('reference').textContent='Referencia: '+result.reference;$('notice').textContent='';
       const privateUrl=new URL(result.managePath,location.origin);
       $('manageBooking').href=privateUrl.href;$('privateLink').value=privateUrl.href;
@@ -215,9 +215,9 @@
       }
       catalog.services.forEach(item=>{
         const card=document.createElement('article');card.className='service-option';
-        const info=document.createElement('div'),name=document.createElement('h3'),duration=document.createElement('p'),price=document.createElement('p'),button=document.createElement('button');
+        const info=document.createElement('div'),name=document.createElement('h3'),duration=document.createElement('p'),button=document.createElement('button');
         name.textContent=item.name;duration.className='muted';duration.textContent=item.duration_minutes+' minutos';
-        price.className='service-price';price.textContent=item.price_label||'Consultar precio';
+
         button.type='button';button.textContent='Elegir servicio';button.setAttribute('aria-label','Elegir '+item.name);button.setAttribute('aria-pressed','false');
         button.onclick=()=>{
           if(busy)return;
@@ -225,7 +225,7 @@
           $('serviceCards').querySelectorAll('article').forEach(row=>{const active=row===card;row.classList.toggle('chosen',active);const control=row.querySelector('button');control.setAttribute('aria-pressed',String(active));control.textContent=active?'Seleccionado':'Elegir servicio';});
           $('serviceInfo').textContent='Seleccionaste '+item.name+'. Continúa para elegir profesional y horario.';updateJourney();
         };
-        info.append(name,duration,price);card.append(info,button);$('serviceCards').append(card);
+        info.append(name,duration);card.append(info,button);$('serviceCards').append(card);
       });
       if(!catalog.services.length)$('serviceInfo').textContent='Este salón no tiene servicios disponibles para reservar en este momento.';
       $('professional').add(new Option('Sin preferencia (disponibilidad del salón)',''));

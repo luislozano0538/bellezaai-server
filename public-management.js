@@ -10,7 +10,7 @@ function key(secret,salonId,appointmentId,requestId){
 function details(row){
   return {reference:row.id,status:row.status,startsAt:new Date(row.starts_at).toISOString(),endsAt:new Date(row.ends_at).toISOString(),
     salonName:row.salon_name,serviceName:row.service_name||"Servicio",professionalName:row.professional_name||"Sin preferencia de profesional",
-    price:row.price_label_snapshot||"",timezone:row.timezone||"UTC",canCancel:row.status==="confirmed"&&new Date(row.starts_at)>new Date()};
+    timezone:row.timezone||"UTC",canCancel:row.status==="confirmed"&&new Date(row.starts_at)>new Date()};
 }
 export async function bookingReceipt(db,secret,salonId,appointmentId){
   const row=(await db.query(selectDetails,[salonId,appointmentId])).rows[0];
