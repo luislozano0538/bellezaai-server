@@ -17,6 +17,7 @@
   subtitle.style.color="#e0d2bc";
   const grid=document.createElement("div");
   grid.style.cssText="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px";
+  grid.className="gallery-grid";
   const filter=document.createElement("select");
   filter.setAttribute("aria-label","Filtrar trabajos por servicio");
   filter.style.cssText="display:block;width:100%;margin:14px 0 16px;padding:12px;background:#27221d;color:#f8e8cb;border:1px solid #ad905e;border-radius:12px;font-size:16px";
@@ -52,6 +53,8 @@
         grid.append(figure);
       });
       section.hidden=!grid.children.length;
+      const nav=document.getElementById("galleryNav");if(nav)nav.hidden=section.hidden;
     })
     .catch(()=>{section.hidden=true;});
 })();
+

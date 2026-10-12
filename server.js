@@ -11,6 +11,7 @@ import {initPasswordRecovery,registerPasswordRecovery} from "./password-recovery
 import { registerClosures, appointmentIsClosed } from "./closures.js";
 import { registerSalonProfile } from "./salon-profile.js";
 import {initSalonGallery,registerSalonGallery} from "./salon-gallery.js";
+import { initSalonReviews } from "./public-management.js";
 import { registerPublicBooking } from "./public-booking.js";
 
 const { Pool } = pg;
@@ -1306,6 +1307,7 @@ async function start() {
   try {
     await initDatabase();
     await initSalonGallery(pool);
+    await initSalonReviews(pool);
     await initPasswordRecovery(pool);
 
     app.listen(PORT, () => {
@@ -1324,3 +1326,4 @@ async function start() {
 }
 
 start();
+
