@@ -12,6 +12,7 @@ import { registerClosures, appointmentIsClosed } from "./closures.js";
 import { registerSalonProfile } from "./salon-profile.js";
 import {initSalonGallery,registerSalonGallery} from "./salon-gallery.js";
 import { initSalonReviews } from "./public-management.js";
+import { registerAccount } from "./account.js";
 import { registerPublicBooking } from "./public-booking.js";
 
 const { Pool } = pg;
@@ -221,6 +222,8 @@ async function auth(req, res, next) {
     next();
   } catch { res.status(503).json({error:"No se pudo verificar tu sesión. Intenta de nuevo."}); }
 }
+
+registerAccount({app,pool,auth,verifyPassword:(password,hash)=>bcrypt.compare(password,hash)});
 
 app.get("/health", async (_req, res) => {
   try {
