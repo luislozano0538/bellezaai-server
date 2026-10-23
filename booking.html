@@ -199,7 +199,7 @@
       catalog=await api('');
       const profile=catalog.profile||{};
       $('heroActions').hidden=false;
-      const firstPhoto=(profile.photos||[]).find(url=>typeof url==='string'&&/^https:\/\//i.test(url));
+      const firstPhoto=(profile.photos||[]).find(url=>typeof url==='string'&&(/^https:\/\//i.test(url)||/^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/.test(url)));
       if(firstPhoto){$('heroPhoto').src=firstPhoto;$('heroPhoto').alt='Interior de '+catalog.name;$('heroPhoto').hidden=false;$('heroPhoto').onerror=()=>{$('heroPhoto').hidden=true;};}
       $('contactNav').hidden=!(profile.description||profile.address||profile.phone);
       catalog.professionals.forEach(member=>{
